@@ -67,24 +67,27 @@ function sumarDiasHabiles(desde, diasHabiles) {
 }
 
 // ─── Días hábiles límite por tipo (Colombia) ─────────────────────────────────
-const DIAS_HABILES_LIMITE = {
-  tutela:   10,  // Decreto 2591/1991 — días hábiles, improrrogable
-  peticion: 15,  // Ley 1755/2015 — días hábiles
-  queja:    15,  // Ley 1755/2015
-  solicitud: 15, // Ley 1755/2015
-  reunion:  null,
-  tarea:    null,
+export const DIAS_HABILES_LIMITE = {
+  tutela:    10,  // Decreto 2591/1991 (el juez puede fijar término distinto)
+  peticion:  15,  // Ley 1755/2015
+  queja:     15,  // Ley 1755/2015
+  solicitud: 15,  // Ley 1755/2015
+  reunion:   null,
+  tarea:     null,
 }
 
 /**
- * Calcula la fecha límite de respuesta según el tipo de solicitud,
- * contando días hábiles reales (excluye domingos y festivos colombianos).
- * @param {string} tipo
+ * Calcula la fecha límite contando días hábiles reales
+ * (excluye sábados, domingos y festivos colombianos).
+ *
+ * @param {string}      tipo
  * @param {string|Date} fechaRecibido
+ * @param {number}      [diasOverride]  Reemplaza el valor por defecto del tipo.
+ *                                      Útil cuando el juez fija un término distinto en tutelas.
  * @returns {Date|null}
  */
-export function calcularFechaLimite(tipo, fechaRecibido) {
-  const dias = DIAS_HABILES_LIMITE[tipo]
+export function calcularFechaLimite(tipo, fechaRecibido, diasOverride) {
+  const dias = diasOverride ?? DIAS_HABILES_LIMITE[tipo]
   if (!dias || !fechaRecibido) return null
   return sumarDiasHabiles(new Date(fechaRecibido), dias)
 }
