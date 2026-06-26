@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useAuth } from './hooks/useAuth'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Tareas from './pages/Tareas'
 import Agenda from './pages/Agenda'
@@ -6,33 +8,51 @@ import Documentos from './pages/Documentos'
 import Configuracion from './pages/Configuracion'
 
 const PAGES = [
-  { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
-  { id: 'tareas', label: 'Tareas', icon: '📋' },
-  { id: 'agenda', label: 'Agenda', icon: '📅' },
-  { id: 'documentos', label: 'Documentos', icon: '📄' },
+  { id: 'dashboard',     label: 'Dashboard',    icon: '🏠' },
+  { id: 'tareas',        label: 'Tareas',        icon: '📋' },
+  { id: 'agenda',        label: 'Agenda',        icon: '📅' },
+  { id: 'documentos',    label: 'Documentos',    icon: '📄' },
   { id: 'configuracion', label: 'Configuración', icon: '⚙️' },
 ]
 
 const PAGE_MAP = {
-  dashboard: Dashboard,
-  tareas: Tareas,
-  agenda: Agenda,
-  documentos: Documentos,
+  dashboard:     Dashboard,
+  tareas:        Tareas,
+  agenda:        Agenda,
+  documentos:    Documentos,
   configuracion: Configuracion,
 }
 
 export default function App() {
+  const { user, loading, signOut } = useAuth()
   const [page, setPage] = useState('dashboard')
+
+  // Pantalla de carga inicial mientras Supabase verifica la sesión
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-3xl mb-3 animate-pulse">🏛️</div>
+          <p className="text-sm text-slate-400">Cargando SecretaríaOS…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Sin sesión → login
+  if (!user) return <Login />
+
   const PageComponent = PAGE_MAP[page]
 
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col">
+      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col shrink-0">
         <div className="px-5 py-4 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">SecretaríaOS</p>
           <p className="text-sm text-slate-600 mt-0.5">Secretaría de Educación</p>
         </div>
+
         <nav className="flex-1 p-3 space-y-0.5">
           {PAGES.map(({ id, label, icon }) => (
             <button
@@ -49,12 +69,20 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        {/* Usuario activo */}
         <div className="px-4 py-3 border-t border-slate-200">
-          <p className="text-xs text-slate-400">Ocaña, Norte de Santander</p>
+          <p className="text-xs text-slate-500 truncate">{user.email}</p>
+          <button
+            onClick={signOut}
+            className="text-xs text-slate-400 hover:text-red-500 transition-colors mt-1"
+          >
+            Cerrar sesión
+          </button>
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* Contenido principal */}
       <main className="flex-1 overflow-auto">
         <PageComponent />
       </main>

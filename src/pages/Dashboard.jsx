@@ -1,7 +1,8 @@
 import StatCard from '../components/dashboard/StatCard'
 import TareaUrgente from '../components/dashboard/TareaUrgente'
 import EventoHoy from '../components/dashboard/EventoHoy'
-import { MOCK_TAREAS, MOCK_EVENTOS } from '../components/dashboard/mockData'
+import { useTareas } from '../hooks/useTareas'
+import { useAgenda } from '../hooks/useAgenda'
 import { diasRestantes } from '../lib/utils'
 
 function saludo() {
@@ -18,31 +19,45 @@ function fechaLarga() {
 }
 
 export default function Dashboard() {
-  const tareas = MOCK_TAREAS
+  const { tareas, loading: loadingTareas, error: errorTareas } = useTareas()
+  const { eventos, loading: loadingEventos } = useAgenda()
 
-  // KPIs
-  const pendientes = tareas.filter(t => t.estado !== 'resuelto').length
-  const criticas   = tareas.filter(t => t.prioridad === 'critica' && t.estado !== 'resuelto').length
-  const vencenHoy  = tareas.filter(t => diasRestantes(t.fecha_limite) === 0 && t.estado !== 'resuelto').length
-  const vencidas   = tareas.filter(t => {
+  // KPIs — excluir resueltos
+  const activas    = tareas.filter(t => t.estado !== 'resuelto')
+  const pendientes = activas.length
+  const criticas   = activas.filter(t => t.prioridad === 'critica').length
+  const vencenHoy  = activas.filter(t => diasRestantes(t.fecha_limite) === 0).length
+  const vencidas   = activas.filter(t => {
     const d = diasRestantes(t.fecha_limite)
-    return d !== null && d < 0 && t.estado !== 'resuelto'
+    return d !== null && d < 0
   }).length
 
-  // Tareas urgentes: top 5 por días restantes ascendente
-  const urgentes = [...tareas]
-    .filter(t => t.estado !== 'resuelto' && t.fecha_limite)
+  // Top 5 más urgentes por fecha límite
+  const urgentes = [...activas]
+    .filter(t => t.fecha_limite)
     .sort((a, b) => diasRestantes(a.fecha_limite) - diasRestantes(b.fecha_limite))
     .slice(0, 5)
 
-  // Eventos: hoy y mañana
+  // Eventos de hoy y mañana
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
   const manana = new Date(hoy)
   manana.setDate(manana.getDate() + 2)
-  const proximosEventos = MOCK_EVENTOS
-    .filter(e => new Date(e.fecha_inicio) >= hoy && new Date(e.fecha_inicio) < manana)
+  const proximosEventos = [...eventos]
+    .filter(e => {
+      const f = new Date(e.fecha_inicio)
+      return f >= hoy && f < manana
+    })
     .sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))
+
+  if (errorTareas) {
+    return (
+      <div className="p-6 text-center text-red-500">
+        <p className="text-2xl mb-2">⚠️</p>
+        <p className="text-sm">Error al cargar datos: {errorTareas.message}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -58,25 +73,25 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Pendientes"
-          value={pendientes}
+          value={loadingTareas ? '…' : pendientes}
           sub="sin resolver"
           color="default"
         />
         <StatCard
           label="Tutelas / Críticas"
-          value={criticas}
+          value={loadingTareas ? '…' : criticas}
           sub="prioridad máxima"
           color={criticas > 0 ? 'red' : 'default'}
         />
         <StatCard
           label="Vencen hoy"
-          value={vencenHoy}
+          value={loadingTareas ? '…' : vencenHoy}
           sub="atención inmediata"
           color={vencenHoy > 0 ? 'yellow' : 'default'}
         />
         <StatCard
           label="Vencidas"
-          value={vencidas}
+          value={loadingTareas ? '…' : vencidas}
           sub="requieren acción"
           color={vencidas > 0 ? 'red' : 'green'}
         />
@@ -90,8 +105,14 @@ export default function Dashboard() {
             <h2 className="text-sm font-semibold text-slate-700">Próximas a vencer</h2>
             <span className="text-xs text-slate-400">{urgentes.length} tareas</span>
           </div>
-          {urgentes.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Sin tareas urgentes</p>
+          {loadingTareas ? (
+            <div className="space-y-3 py-2">
+              {[1,2,3].map(i => (
+                <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : urgentes.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">Sin tareas urgentes 🎉</p>
           ) : (
             urgentes.map(t => <TareaUrgente key={t.id} tarea={t} />)
           )}
@@ -103,8 +124,14 @@ export default function Dashboard() {
             <h2 className="text-sm font-semibold text-slate-700">Agenda de hoy</h2>
             <span className="text-xs text-slate-400">{proximosEventos.length} eventos</span>
           </div>
-          {proximosEventos.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Día sin eventos</p>
+          {loadingEventos ? (
+            <div className="space-y-3 py-2">
+              {[1,2].map(i => (
+                <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : proximosEventos.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">Día sin eventos</p>
           ) : (
             proximosEventos.map(e => <EventoHoy key={e.id} evento={e} />)
           )}

@@ -3,11 +3,11 @@ import TablaTareas from '../components/tareas/TablaTareas'
 import FormTarea from '../components/tareas/FormTarea'
 import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
-import { MOCK_TAREAS } from '../components/dashboard/mockData'
+import { useTareas } from '../hooks/useTareas'
 import { formatFecha, diasRestantes } from '../lib/utils'
 
-const ESTADOS  = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
-const TIPOS    = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
+const ESTADOS = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
+const TIPOS   = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
 
 const ESTADO_LABEL = {
   todos: 'Todos los estados', pendiente: 'Pendiente', en_proceso: 'En proceso',
@@ -19,12 +19,14 @@ const TIPO_LABEL = {
 }
 
 export default function Tareas() {
-  const [tareas, setTareas]       = useState(MOCK_TAREAS)
+  const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
   const [busqueda, setBusqueda]   = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todos')
   const [filtroTipo, setFiltroTipo]     = useState('todos')
   const [modalNueva, setModalNueva]     = useState(false)
+  const [guardando, setGuardando]       = useState(false)
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
+  const [errorAccion, setErrorAccion]   = useState(null)
 
   const tareasFiltradas = useMemo(() => {
     return tareas.filter(t => {
@@ -37,15 +39,27 @@ export default function Tareas() {
     })
   }, [tareas, busqueda, filtroEstado, filtroTipo])
 
-  function handleNuevaTarea(data) {
-    const nueva = { ...data, id: crypto.randomUUID() }
-    setTareas(prev => [nueva, ...prev])
-    setModalNueva(false)
+  async function handleNuevaTarea(data) {
+    setGuardando(true)
+    setErrorAccion(null)
+    try {
+      await crearTarea(data)
+      setModalNueva(false)
+    } catch (e) {
+      setErrorAccion('Error al guardar: ' + e.message)
+    } finally {
+      setGuardando(false)
+    }
   }
 
-  function handleActualizarEstado(id, estado) {
-    setTareas(prev => prev.map(t => t.id === id ? { ...t, estado } : t))
-    setTareaSeleccionada(prev => prev?.id === id ? { ...prev, estado } : prev)
+  async function handleActualizarEstado(id, estado) {
+    setErrorAccion(null)
+    try {
+      const actualizada = await actualizarTarea(id, { estado })
+      setTareaSeleccionada(actualizada)
+    } catch (e) {
+      setErrorAccion('Error al actualizar: ' + e.message)
+    }
   }
 
   const sel = tareaSeleccionada
@@ -53,13 +67,15 @@ export default function Tareas() {
   return (
     <div className="flex flex-col h-full">
       {/* Cabecera */}
-      <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4">
+      <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Tareas y Solicitudes</h1>
-          <p className="text-xs text-slate-400 mt-0.5">{tareas.length} registros totales</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {loading ? 'Cargando…' : `${tareas.length} registros totales`}
+          </p>
         </div>
         <button
-          onClick={() => setModalNueva(true)}
+          onClick={() => { setModalNueva(true); setErrorAccion(null) }}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <span className="text-base leading-none">+</span>
@@ -67,8 +83,15 @@ export default function Tareas() {
         </button>
       </div>
 
+      {/* Error global */}
+      {(error || errorAccion) && (
+        <div className="mx-6 mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shrink-0">
+          {error?.message || errorAccion}
+        </div>
+      )}
+
       {/* Filtros */}
-      <div className="px-6 py-3 border-b border-slate-200 bg-white flex flex-wrap items-center gap-3">
+      <div className="px-6 py-3 border-b border-slate-200 bg-white flex flex-wrap items-center gap-3 shrink-0">
         <input
           type="search"
           placeholder="Buscar por asunto o remitente…"
@@ -98,48 +121,63 @@ export default function Tareas() {
             Limpiar filtros
           </button>
         )}
-        <span className="text-xs text-slate-400 ml-auto">{tareasFiltradas.length} resultado{tareasFiltradas.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-slate-400 ml-auto">
+          {tareasFiltradas.length} resultado{tareasFiltradas.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Tabla */}
       <div className="flex-1 overflow-auto bg-white px-2">
-        <TablaTareas tareas={tareasFiltradas} onSelect={setTareaSeleccionada} />
+        {loading ? (
+          <div className="p-8 space-y-3">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <TablaTareas tareas={tareasFiltradas} onSelect={setTareaSeleccionada} />
+        )}
       </div>
 
       {/* Modal nueva tarea */}
       <Modal open={modalNueva} onClose={() => setModalNueva(false)} title="Registrar nueva tarea" width="max-w-2xl">
-        <FormTarea onSubmit={handleNuevaTarea} onCancel={() => setModalNueva(false)} />
+        <FormTarea onSubmit={handleNuevaTarea} onCancel={() => setModalNueva(false)} loading={guardando} />
       </Modal>
 
       {/* Panel detalle tarea seleccionada */}
       {sel && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-slate-200 shadow-xl z-40 flex flex-col overflow-y-auto">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+        <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-slate-200 shadow-xl z-40 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
             <h2 className="text-sm font-semibold text-slate-800">Detalle de tarea</h2>
             <button onClick={() => setTareaSeleccionada(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
           </div>
-          <div className="p-5 flex flex-col gap-4">
+
+          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
             <div className="flex gap-2 flex-wrap">
               <Badge value={sel.tipo} />
               <Badge value={sel.prioridad} />
               <Badge value={sel.estado} />
             </div>
+
             <div>
               <p className="text-xs text-slate-400 mb-0.5">Asunto</p>
               <p className="text-sm font-medium text-slate-800">{sel.asunto}</p>
             </div>
+
             {sel.remitente && (
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">Remitente</p>
                 <p className="text-sm text-slate-700">{sel.remitente}</p>
               </div>
             )}
+
             {sel.descripcion && (
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">Descripción</p>
                 <p className="text-sm text-slate-600 leading-relaxed">{sel.descripcion}</p>
               </div>
             )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">Recibido</p>
@@ -152,28 +190,43 @@ export default function Tareas() {
                   const d = diasRestantes(sel.fecha_limite)
                   if (d === null) return null
                   const color = d < 0 ? 'text-red-600' : d <= 3 ? 'text-orange-500' : 'text-slate-400'
-                  const label = d < 0 ? `Venció hace ${Math.abs(d)} días` : d === 0 ? 'Vence hoy' : `${d} días restantes`
+                  const label = d < 0
+                    ? `Venció hace ${Math.abs(d)} días`
+                    : d === 0 ? 'Vence hoy'
+                    : `${d} días restantes`
                   return <p className={`text-xs mt-0.5 ${color}`}>{label}</p>
                 })()}
               </div>
             </div>
 
+            {/* Origen */}
+            {sel.origen && (
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Origen</p>
+                <Badge value={sel.origen} />
+              </div>
+            )}
+
             {/* Cambio de estado */}
             <div className="border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 mb-2">Cambiar estado</p>
+              <p className="text-xs text-slate-400 mb-2 font-medium">Cambiar estado</p>
               <div className="flex flex-col gap-2">
-                {['pendiente', 'en_proceso', 'resuelto'].map(estado => (
+                {[
+                  { value: 'pendiente',  label: 'Pendiente' },
+                  { value: 'en_proceso', label: 'En proceso' },
+                  { value: 'resuelto',   label: '✓ Marcar Resuelto' },
+                ].map(({ value, label }) => (
                   <button
-                    key={estado}
-                    onClick={() => handleActualizarEstado(sel.id, estado)}
-                    disabled={sel.estado === estado}
+                    key={value}
+                    onClick={() => handleActualizarEstado(sel.id, value)}
+                    disabled={sel.estado === value}
                     className={`py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      sel.estado === estado
+                      sel.estado === value
                         ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer'
                     }`}
                   >
-                    {estado === 'pendiente' ? 'Marcar Pendiente' : estado === 'en_proceso' ? 'Marcar En proceso' : '✓ Marcar Resuelto'}
+                    {label}
                   </button>
                 ))}
               </div>
