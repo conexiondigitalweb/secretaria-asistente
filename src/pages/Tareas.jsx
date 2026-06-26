@@ -5,7 +5,7 @@ import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
 import { useFuncionarios } from '../hooks/useFuncionarios'
-import { formatFecha, diasRestantes, diasHabilesRestantes } from '../lib/utils'
+import { formatFecha, diasRestantes, diasHabilesRestantes, esHoy, formatDiaCorto } from '../lib/utils'
 import { notificarAsignacion } from '../lib/notificaciones'
 
 const ESTADOS = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
@@ -310,11 +310,19 @@ export default function Tareas() {
                   {sel.fecha_limite && (() => {
                     const d = diasHabilesRestantes(sel.fecha_limite)
                     if (d === null) return null
-                    const color = d < 0 ? 'text-red-600' : d <= 3 ? 'text-orange-500' : 'text-slate-400'
+                    const hoyExacto = esHoy(sel.fecha_limite)
+                    const color = d < 0 || hoyExacto
+                      ? 'text-red-600'
+                      : d === 0 ? 'text-orange-500'
+                      : d <= 3   ? 'text-orange-500'
+                      : 'text-slate-400'
                     const label = d < 0
                       ? `Venció hace ${Math.abs(d)} días hábiles`
-                      : d === 0 ? 'Vence hoy'
-                      : `${d} días hábiles`
+                      : hoyExacto
+                        ? 'Vence hoy'
+                        : d === 0
+                          ? `0 días hábiles — Vence ${formatDiaCorto(sel.fecha_limite)}`
+                          : `${d} días hábiles`
                     return <p className={`text-xs mt-0.5 ${color}`}>{label}</p>
                   })()}
                 </div>

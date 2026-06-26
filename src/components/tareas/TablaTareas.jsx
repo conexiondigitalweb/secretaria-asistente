@@ -1,18 +1,21 @@
 import Badge from '../ui/Badge'
-import { diasHabilesRestantes, formatFecha } from '../../lib/utils'
+import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto } from '../../lib/utils'
 
 function DiasHabiles({ fecha_limite }) {
   const dias = diasHabilesRestantes(fecha_limite)
   if (dias === null) return <span className="text-slate-400 text-xs">—</span>
-  const label = dias === 0
-    ? 'Hoy'
-    : dias < 0
-      ? `Hace ${Math.abs(dias)}d háb.`
-      : `${dias}d háb.`
-  const color = dias < 0
+  const hoyExacto = esHoy(fecha_limite)
+  const label = dias < 0
+    ? `Hace ${Math.abs(dias)}d háb.`
+    : hoyExacto
+      ? 'Hoy'
+      : dias === 0
+        ? `0h · ${formatDiaCorto(fecha_limite)}`
+        : `${dias}d háb.`
+  const color = dias < 0 || hoyExacto
     ? 'text-red-600 font-semibold'
     : dias === 0
-      ? 'text-red-500 font-semibold'
+      ? 'text-orange-500 font-semibold'
       : dias <= 3
         ? 'text-orange-500 font-medium'
         : 'text-slate-500'

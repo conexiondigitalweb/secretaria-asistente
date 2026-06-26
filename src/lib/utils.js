@@ -66,6 +66,21 @@ function sumarDiasHabiles(desde, diasHabiles) {
   return fecha
 }
 
+/**
+ * Avanza la fecha hasta el siguiente día hábil si cae en no-hábil.
+ * Guarda de seguridad para cuando colombia-holiday no detecta algún festivo móvil.
+ * @param {Date} fecha
+ * @returns {Date}
+ */
+function siguienteDiaHabil(fecha) {
+  const d = new Date(fecha)
+  d.setHours(0, 0, 0, 0)
+  while (esNoHabil(d)) {
+    d.setDate(d.getDate() + 1)
+  }
+  return d
+}
+
 // ─── Días hábiles límite por tipo (Colombia) ─────────────────────────────────
 export const DIAS_HABILES_LIMITE = {
   tutela:    10,  // Decreto 2591/1991 (el juez puede fijar término distinto)
@@ -89,7 +104,10 @@ export const DIAS_HABILES_LIMITE = {
 export function calcularFechaLimite(tipo, fechaRecibido, diasOverride) {
   const dias = diasOverride ?? DIAS_HABILES_LIMITE[tipo]
   if (!dias || !fechaRecibido) return null
-  return sumarDiasHabiles(new Date(fechaRecibido), dias)
+  const resultado = sumarDiasHabiles(new Date(fechaRecibido), dias)
+  // Guardia: si el paquete colombia-holiday no detectó el festivo,
+  // siguienteDiaHabil lo corrige avanzando al próximo día hábil real.
+  return siguienteDiaHabil(resultado)
 }
 
 /**
@@ -146,4 +164,34 @@ export function diasRestantes(fechaLimite) {
   const limite = new Date(fechaLimite)
   limite.setHours(0, 0, 0, 0)
   return Math.round((limite - hoy) / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * Retorna true solo si la fecha límite es exactamente hoy (comparación de fecha local).
+ * Úsalo para el label "Vence hoy" — NO uses diasHabilesRestantes() === 0,
+ * que puede ser 0 para fechas futuras separadas solo por festivos/fines de semana.
+ * @param {string|Date|null} fechaLimite
+ * @returns {boolean}
+ */
+export function esHoy(fechaLimite) {
+  if (!fechaLimite) return false
+  const hoy = new Date()
+  const limite = new Date(fechaLimite)
+  return (
+    limite.getFullYear() === hoy.getFullYear() &&
+    limite.getMonth()    === hoy.getMonth()    &&
+    limite.getDate()     === hoy.getDate()
+  )
+}
+
+/**
+ * Formatea una fecha en formato corto para labels de urgencia: "lun 29 jun"
+ * @param {string|Date|null} fecha
+ * @returns {string}
+ */
+export function formatDiaCorto(fecha) {
+  if (!fecha) return ''
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  }).format(new Date(fecha))
 }
