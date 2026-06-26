@@ -20,13 +20,16 @@ const TIPO_LABEL = {
 
 export default function Tareas() {
   const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
-  const [busqueda, setBusqueda]   = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('todos')
-  const [filtroTipo, setFiltroTipo]     = useState('todos')
-  const [modalNueva, setModalNueva]     = useState(false)
-  const [guardando, setGuardando]       = useState(false)
+  const [busqueda, setBusqueda]             = useState('')
+  const [filtroEstado, setFiltroEstado]     = useState('todos')
+  const [filtroTipo, setFiltroTipo]         = useState('todos')
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
+  const [modalNueva, setModalNueva]         = useState(false)
+  const [guardando, setGuardando]           = useState(false)
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
-  const [errorAccion, setErrorAccion]   = useState(null)
+  const [errorAccion, setErrorAccion]       = useState(null)
+
+  const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
 
   const tareasFiltradas = useMemo(() => {
     return tareas.filter(t => {
@@ -62,177 +65,241 @@ export default function Tareas() {
     }
   }
 
+  function limpiarFiltros() {
+    setBusqueda(''); setFiltroEstado('todos'); setFiltroTipo('todos')
+  }
+
   const sel = tareaSeleccionada
 
   return (
     <div className="flex flex-col h-full">
-      {/* Cabecera */}
-      <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Tareas y Solicitudes</h1>
+
+      {/* ── Cabecera ──────────────────────────────────────────────────── */}
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-white
+                      flex items-center justify-between gap-3 shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-800 truncate">
+            Tareas y Solicitudes
+          </h1>
           <p className="text-xs text-slate-400 mt-0.5">
             {loading ? 'Cargando…' : `${tareas.length} registros totales`}
           </p>
         </div>
-        <button
-          onClick={() => { setModalNueva(true); setErrorAccion(null) }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <span className="text-base leading-none">+</span>
-          Nueva tarea
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Botón filtros — solo en móvil */}
+          <button
+            onClick={() => setFiltrosAbiertos(v => !v)}
+            className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors
+              ${hayFiltros
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-slate-200 text-slate-600'
+              }`}
+          >
+            <span>⚙</span>
+            {hayFiltros && <span className="text-xs font-bold">●</span>}
+          </button>
+          <button
+            onClick={() => { setModalNueva(true); setErrorAccion(null) }}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white
+                       text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors"
+          >
+            <span className="text-base leading-none">+</span>
+            <span className="hidden sm:inline">Nueva tarea</span>
+            <span className="sm:hidden">Nueva</span>
+          </button>
+        </div>
       </div>
 
       {/* Error global */}
       {(error || errorAccion) && (
-        <div className="mx-6 mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shrink-0">
+        <div className="mx-4 sm:mx-6 mt-3 text-xs text-red-600 bg-red-50
+                        border border-red-200 rounded-lg px-3 py-2 shrink-0">
           {error?.message || errorAccion}
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="px-6 py-3 border-b border-slate-200 bg-white flex flex-wrap items-center gap-3 shrink-0">
-        <input
-          type="search"
-          placeholder="Buscar por asunto o remitente…"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-        />
-        <select
-          value={filtroEstado}
-          onChange={e => setFiltroEstado(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {ESTADOS.map(e => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
-        </select>
-        <select
-          value={filtroTipo}
-          onChange={e => setFiltroTipo(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
-        </select>
-        {(busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos') && (
-          <button
-            onClick={() => { setBusqueda(''); setFiltroEstado('todos'); setFiltroTipo('todos') }}
-            className="text-xs text-slate-400 hover:text-slate-600 underline"
-          >
-            Limpiar filtros
-          </button>
-        )}
-        <span className="text-xs text-slate-400 ml-auto">
-          {tareasFiltradas.length} resultado{tareasFiltradas.length !== 1 ? 's' : ''}
-        </span>
+      {/* ── Filtros ───────────────────────────────────────────────────── */}
+      {/* En desktop: siempre visible en fila. En móvil: colapsable en columna */}
+      <div className={`border-b border-slate-200 bg-white shrink-0
+                       ${filtrosAbiertos ? 'block' : 'hidden'} md:block`}>
+        <div className="px-4 sm:px-6 py-3 flex flex-col md:flex-row md:flex-wrap
+                        md:items-center gap-2 md:gap-3">
+          <input
+            type="search"
+            placeholder="Buscar por asunto o remitente…"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            className="w-full md:w-64 border border-slate-200 rounded-lg px-3 py-1.5
+                       text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex gap-2">
+            <select
+              value={filtroEstado}
+              onChange={e => setFiltroEstado(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {ESTADOS.map(e => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
+            </select>
+            <select
+              value={filtroTipo}
+              onChange={e => setFiltroTipo(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center justify-between md:contents">
+            {hayFiltros && (
+              <button
+                onClick={limpiarFiltros}
+                className="text-xs text-slate-400 hover:text-slate-600 underline"
+              >
+                Limpiar filtros
+              </button>
+            )}
+            <span className="text-xs text-slate-400 md:ml-auto">
+              {tareasFiltradas.length} resultado{tareasFiltradas.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Tabla */}
-      <div className="flex-1 overflow-auto bg-white px-2">
+      {/* ── Tabla con scroll horizontal ───────────────────────────────── */}
+      <div className="flex-1 overflow-auto bg-white">
         {loading ? (
-          <div className="p-8 space-y-3">
-            {[1,2,3,4,5].map(i => (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : (
-          <TablaTareas tareas={tareasFiltradas} onSelect={setTareaSeleccionada} />
+          <TablaTareas tareas={tareasFiltradas} onSelect={t => { setTareaSeleccionada(t); setFiltrosAbiertos(false) }} />
         )}
       </div>
 
-      {/* Modal nueva tarea */}
-      <Modal open={modalNueva} onClose={() => setModalNueva(false)} title="Registrar nueva tarea" width="max-w-2xl">
-        <FormTarea onSubmit={handleNuevaTarea} onCancel={() => setModalNueva(false)} loading={guardando} />
+      {/* ── Modal nueva tarea ─────────────────────────────────────────── */}
+      <Modal open={modalNueva} onClose={() => setModalNueva(false)}
+             title="Registrar nueva tarea" width="max-w-2xl">
+        <FormTarea onSubmit={handleNuevaTarea}
+                   onCancel={() => setModalNueva(false)}
+                   loading={guardando} />
       </Modal>
 
-      {/* Panel detalle tarea seleccionada */}
+      {/* ── Panel detalle — full screen en móvil, lateral en desktop ──── */}
       {sel && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-slate-200 shadow-xl z-40 flex flex-col">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
-            <h2 className="text-sm font-semibold text-slate-800">Detalle de tarea</h2>
-            <button onClick={() => setTareaSeleccionada(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
+        <>
+          {/* Backdrop en móvil */}
+          <div
+            className="md:hidden fixed inset-0 bg-black/40 z-40"
+            onClick={() => setTareaSeleccionada(null)}
+          />
+          <div className="fixed inset-x-0 bottom-0 top-16 md:top-0 md:inset-y-0
+                          md:left-auto md:right-0 md:w-96
+                          bg-white border-t md:border-t-0 md:border-l border-slate-200
+                          shadow-xl z-50 flex flex-col rounded-t-2xl md:rounded-none">
+
+            <div className="flex items-center justify-between px-5 py-4
+                            border-b border-slate-200 shrink-0">
+              <h2 className="text-sm font-semibold text-slate-800">Detalle de tarea</h2>
+              <button
+                onClick={() => setTareaSeleccionada(null)}
+                className="text-slate-400 hover:text-slate-600 text-2xl leading-none p-1"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4
+                            pb-safe-area-inset-bottom">
+              <div className="flex gap-2 flex-wrap">
+                <Badge value={sel.tipo} />
+                <Badge value={sel.prioridad} />
+                <Badge value={sel.estado} />
+              </div>
+
+              {sel.radicado && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Radicado</p>
+                  <p className="text-xs font-mono text-slate-700 bg-slate-100
+                                rounded px-2 py-1 break-all">{sel.radicado}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Asunto</p>
+                <p className="text-sm font-medium text-slate-800">{sel.asunto}</p>
+              </div>
+
+              {sel.remitente && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Remitente</p>
+                  <p className="text-sm text-slate-700">{sel.remitente}</p>
+                </div>
+              )}
+
+              {sel.descripcion && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Descripción</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">{sel.descripcion}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Recibido</p>
+                  <p className="text-sm text-slate-700">{formatFecha(sel.fecha_recibido)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Fecha límite</p>
+                  <p className="text-sm text-slate-700">{formatFecha(sel.fecha_limite)}</p>
+                  {sel.fecha_limite && (() => {
+                    const d = diasHabilesRestantes(sel.fecha_limite)
+                    if (d === null) return null
+                    const color = d < 0 ? 'text-red-600' : d <= 3 ? 'text-orange-500' : 'text-slate-400'
+                    const label = d < 0
+                      ? `Venció hace ${Math.abs(d)} días hábiles`
+                      : d === 0 ? 'Vence hoy'
+                      : `${d} días hábiles`
+                    return <p className={`text-xs mt-0.5 ${color}`}>{label}</p>
+                  })()}
+                </div>
+              </div>
+
+              {sel.origen && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Origen</p>
+                  <Badge value={sel.origen} />
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-xs text-slate-400 mb-2 font-medium">Cambiar estado</p>
+                <div className="flex flex-col gap-2">
+                  {[
+                    { value: 'pendiente',  label: 'Pendiente' },
+                    { value: 'en_proceso', label: 'En proceso' },
+                    { value: 'resuelto',   label: '✓ Marcar Resuelto' },
+                  ].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => handleActualizarEstado(sel.id, value)}
+                      disabled={sel.estado === value}
+                      className={`py-2.5 rounded-lg text-sm font-medium transition-colors border
+                        ${sel.estado === value
+                          ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer'
+                        }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-            <div className="flex gap-2 flex-wrap">
-              <Badge value={sel.tipo} />
-              <Badge value={sel.prioridad} />
-              <Badge value={sel.estado} />
-            </div>
-
-            <div>
-              <p className="text-xs text-slate-400 mb-0.5">Asunto</p>
-              <p className="text-sm font-medium text-slate-800">{sel.asunto}</p>
-            </div>
-
-            {sel.remitente && (
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Remitente</p>
-                <p className="text-sm text-slate-700">{sel.remitente}</p>
-              </div>
-            )}
-
-            {sel.descripcion && (
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Descripción</p>
-                <p className="text-sm text-slate-600 leading-relaxed">{sel.descripcion}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Recibido</p>
-                <p className="text-sm text-slate-700">{formatFecha(sel.fecha_recibido)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Fecha límite</p>
-                <p className="text-sm text-slate-700">{formatFecha(sel.fecha_limite)}</p>
-                {sel.fecha_limite && (() => {
-                  const d = diasHabilesRestantes(sel.fecha_limite)
-                  if (d === null) return null
-                  const color = d < 0 ? 'text-red-600' : d <= 3 ? 'text-orange-500' : 'text-slate-400'
-                  const label = d < 0
-                    ? `Venció hace ${Math.abs(d)} días`
-                    : d === 0 ? 'Vence hoy'
-                    : `${d} días restantes`
-                  return <p className={`text-xs mt-0.5 ${color}`}>{label}</p>
-                })()}
-              </div>
-            </div>
-
-            {/* Origen */}
-            {sel.origen && (
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Origen</p>
-                <Badge value={sel.origen} />
-              </div>
-            )}
-
-            {/* Cambio de estado */}
-            <div className="border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 mb-2 font-medium">Cambiar estado</p>
-              <div className="flex flex-col gap-2">
-                {[
-                  { value: 'pendiente',  label: 'Pendiente' },
-                  { value: 'en_proceso', label: 'En proceso' },
-                  { value: 'resuelto',   label: '✓ Marcar Resuelto' },
-                ].map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => handleActualizarEstado(sel.id, value)}
-                    disabled={sel.estado === value}
-                    className={`py-2 rounded-lg text-sm font-medium transition-colors border ${
-                      sel.estado === value
-                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   )

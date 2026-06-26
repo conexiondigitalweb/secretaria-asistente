@@ -22,7 +22,6 @@ export default function Dashboard() {
   const { tareas, loading: loadingTareas, error: errorTareas } = useTareas()
   const { eventos, loading: loadingEventos } = useAgenda()
 
-  // KPIs — excluir resueltos
   const activas    = tareas.filter(t => t.estado !== 'resuelto')
   const pendientes = activas.length
   const criticas   = activas.filter(t => t.prioridad === 'critica').length
@@ -32,22 +31,17 @@ export default function Dashboard() {
     return d !== null && d < 0
   }).length
 
-  // Top 5 más urgentes por fecha límite
   const urgentes = [...activas]
     .filter(t => t.fecha_limite)
     .sort((a, b) => diasHabilesRestantes(a.fecha_limite) - diasHabilesRestantes(b.fecha_limite))
     .slice(0, 5)
 
-  // Eventos de hoy y mañana
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
   const manana = new Date(hoy)
   manana.setDate(manana.getDate() + 2)
   const proximosEventos = [...eventos]
-    .filter(e => {
-      const f = new Date(e.fecha_inicio)
-      return f >= hoy && f < manana
-    })
+    .filter(e => { const f = new Date(e.fecha_inicio); return f >= hoy && f < manana })
     .sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))
 
   if (errorTareas) {
@@ -60,17 +54,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+
       {/* Encabezado */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">
           {saludo()}, Secretario Sanjuán
         </h1>
-        <p className="text-sm text-slate-500 mt-0.5 capitalize">{fechaLarga()}</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-0.5 capitalize">{fechaLarga()}</p>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* KPIs — 2 columnas siempre, 4 en lg */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-8">
         <StatCard
           label="Pendientes"
           value={loadingTareas ? '…' : pendientes}
@@ -78,9 +73,9 @@ export default function Dashboard() {
           color="default"
         />
         <StatCard
-          label="Tutelas / Críticas"
+          label="Críticas"
           value={loadingTareas ? '…' : criticas}
-          sub="prioridad máxima"
+          sub="tutelas y urgentes"
           color={criticas > 0 ? 'red' : 'default'}
         />
         <StatCard
@@ -97,17 +92,18 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Cuerpo principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Tareas urgentes — 2/3 del ancho */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
+      {/* Cuerpo — apilado en móvil, 3 columnas en lg */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
+        {/* Tareas urgentes */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-700">Próximas a vencer</h2>
             <span className="text-xs text-slate-400">{urgentes.length} tareas</span>
           </div>
           {loadingTareas ? (
             <div className="space-y-3 py-2">
-              {[1,2,3].map(i => (
+              {[1, 2, 3].map(i => (
                 <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
               ))}
             </div>
@@ -119,14 +115,14 @@ export default function Dashboard() {
         </div>
 
         {/* Agenda hoy */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-700">Agenda de hoy</h2>
             <span className="text-xs text-slate-400">{proximosEventos.length} eventos</span>
           </div>
           {loadingEventos ? (
             <div className="space-y-3 py-2">
-              {[1,2].map(i => (
+              {[1, 2].map(i => (
                 <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
               ))}
             </div>
@@ -136,6 +132,7 @@ export default function Dashboard() {
             proximosEventos.map(e => <EventoHoy key={e.id} evento={e} />)
           )}
         </div>
+
       </div>
     </div>
   )

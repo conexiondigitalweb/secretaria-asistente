@@ -33,8 +33,8 @@ export default function TablaTareas({ tareas, onSelect }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+      <table className="w-full text-sm min-w-[640px]">
         <thead>
           <tr className="border-b border-slate-200">
             {['Tipo', 'Asunto', 'Remitente', 'Recibido', 'Límite', 'Estado', 'Prioridad'].map(h => (

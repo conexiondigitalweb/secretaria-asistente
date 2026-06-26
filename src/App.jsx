@@ -12,7 +12,7 @@ const PAGES = [
   { id: 'tareas',        label: 'Tareas',        icon: '📋' },
   { id: 'agenda',        label: 'Agenda',        icon: '📅' },
   { id: 'documentos',    label: 'Documentos',    icon: '📄' },
-  { id: 'configuracion', label: 'Configuración', icon: '⚙️' },
+  { id: 'configuracion', label: 'Config',        icon: '⚙️' },
 ]
 
 const PAGE_MAP = {
@@ -27,7 +27,6 @@ export default function App() {
   const { user, loading, signOut } = useAuth()
   const [page, setPage] = useState('dashboard')
 
-  // Pantalla de carga inicial mientras Supabase verifica la sesión
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -39,15 +38,15 @@ export default function App() {
     )
   }
 
-  // Sin sesión → login
   if (!user) return <Login />
 
   const PageComponent = PAGE_MAP[page]
 
   return (
-    <div className="flex h-screen bg-slate-50">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col shrink-0">
+    <div className="flex flex-col h-screen bg-slate-50 md:flex-row">
+
+      {/* ── Sidebar — visible solo en md y up ─────────────────────────── */}
+      <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 flex-col shrink-0">
         <div className="px-5 py-4 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">SecretaríaOS</p>
           <p className="text-sm text-slate-600 mt-0.5">Secretaría de Educación</p>
@@ -70,7 +69,6 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Usuario activo */}
         <div className="px-4 py-3 border-t border-slate-200">
           <p className="text-xs text-slate-500 truncate">{user.email}</p>
           <button
@@ -82,10 +80,37 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Contenido principal */}
-      <main className="flex-1 overflow-auto">
+      {/* ── Contenido principal ────────────────────────────────────────── */}
+      <main className="flex-1 overflow-auto pb-16 md:pb-0">
         <PageComponent />
       </main>
+
+      {/* ── Bottom navigation — visible solo en móvil (< md) ──────────── */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30
+                      flex items-stretch h-16 safe-area-inset-bottom">
+        {PAGES.map(({ id, label, icon }) => (
+          <button
+            key={id}
+            onClick={() => setPage(id)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-center
+                        transition-colors pt-1
+                        ${page === id
+                          ? 'text-blue-600'
+                          : 'text-slate-400 active:text-slate-600'
+                        }`}
+          >
+            <span className="text-xl leading-none">{icon}</span>
+            <span className={`text-[10px] leading-tight ${page === id ? 'font-semibold' : ''}`}>
+              {label}
+            </span>
+            {/* Indicador activo */}
+            {page === id && (
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-600 rounded-full" />
+            )}
+          </button>
+        ))}
+      </nav>
+
     </div>
   )
 }
