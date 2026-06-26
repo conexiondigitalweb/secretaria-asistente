@@ -101,7 +101,7 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
       // Al cambiar funcionario, precalcular wa link y resetear estado notif
       if (field === 'funcionario_id') {
         const f = funcionarios.find(fn => fn.id === value)
-        const tel = f ? normalizarTel(f.whatsapp ?? f.telefono) : null
+        const tel = f ? normalizarTel(f.whatsapp) : null
         setNotifState({ waLink: tel ? buildWaLink(f, next) : null, correoEnviado: false })
       }
       return next
@@ -117,7 +117,7 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
   }
 
   function buildWaLink(f, formData) {
-    const tel = normalizarTel(f.whatsapp ?? f.telefono)
+    const tel = normalizarTel(f.whatsapp)
     if (!tel) return null
     const fechaStr = formData.fecha_limite
       ? `Fecha límite: ${new Date(parseFechaLocal(formData.fecha_limite)).toLocaleDateString('es-CO', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}.`
@@ -418,7 +418,7 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
               {notifState.error && (
                 <p className="text-xs text-red-600">{notifState.error}</p>
               )}
-              {!f.correo && !f.whatsapp && !f.telefono && (
+              {!f.correo && !f.whatsapp && (
                 <p className="text-xs text-slate-400">
                   Este funcionario no tiene correo ni teléfono registrado.
                   Agrégalos en Configuración.

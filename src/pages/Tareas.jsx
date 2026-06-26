@@ -4,6 +4,7 @@ import FormTarea from '../components/tareas/FormTarea'
 import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
+import { useFuncionarios } from '../hooks/useFuncionarios'
 import { formatFecha, diasRestantes, diasHabilesRestantes } from '../lib/utils'
 import { notificarAsignacion } from '../lib/notificaciones'
 
@@ -21,6 +22,7 @@ const TIPO_LABEL = {
 
 export default function Tareas() {
   const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
+  const { funcionarios } = useFuncionarios({ soloActivos: true })
   const [busqueda, setBusqueda]             = useState('')
   const [filtroEstado, setFiltroEstado]     = useState('todos')
   const [filtroTipo, setFiltroTipo]         = useState('todos')
@@ -30,6 +32,8 @@ export default function Tareas() {
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
   const [errorAccion, setErrorAccion]       = useState(null)
   const [notifDetalle, setNotifDetalle]     = useState({}) // { enviando, correoEnviado, error }
+  const [funcEdit, setFuncEdit]             = useState(null)  // id seleccionado en el panel detalle
+  const [guardandoFunc, setGuardandoFunc]   = useState(false)
 
   const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
 
@@ -57,8 +61,42 @@ export default function Tareas() {
     }
   }
 
+  function waLinkDetalle(funcionario, tarea) {
+    const wa = funcionario?.whatsapp ?? ''
+    const tel = wa.replace(/[\s\-().+]/g, '')
+    if (!tel) return null
+    const num = tel.startsWith('57') ? tel : '57' + tel
+    const fechaStr = tarea.fecha_limite
+      ? `Fecha límite: ${new Date(tarea.fecha_limite).toLocaleDateString('es-CO', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        })}.`
+      : ''
+    const msg =
+      `Hola ${funcionario.nombre}, se te ha asignado la siguiente tarea en SecretaríaOS:\n\n` +
+      `*Asunto:* ${tarea.asunto}\n` +
+      `*Tipo:* ${tarea.tipo}\n` +
+      (tarea.remitente ? `*Remitente:* ${tarea.remitente}\n` : '') +
+      (fechaStr ? `*${fechaStr}*\n` : '') +
+      (tarea.descripcion ? `\n${tarea.descripcion}` : '')
+    return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
+  }
+
+  async function handleGuardarFuncionario() {
+    if (!sel) return
+    setGuardandoFunc(true)
+    setNotifDetalle({})
+    try {
+      const actualizada = await actualizarTarea(sel.id, { funcionario_id: funcEdit || null })
+      setTareaSeleccionada(actualizada)
+    } catch (e) {
+      setNotifDetalle({ error: 'Error al guardar: ' + e.message })
+    } finally {
+      setGuardandoFunc(false)
+    }
+  }
+
   async function handleNotificarDetalle() {
-    const f = sel?.funcionario
+    const f = funcionarios.find(fn => fn.id === funcEdit) ?? sel?.funcionario
     if (!f) return
     setNotifDetalle({ enviando: true, error: null })
     const { correo } = await notificarAsignacion(f, sel)
@@ -185,7 +223,12 @@ export default function Tareas() {
             ))}
           </div>
         ) : (
-          <TablaTareas tareas={tareasFiltradas} onSelect={t => { setTareaSeleccionada(t); setFiltrosAbiertos(false); setNotifDetalle({}) }} />
+          <TablaTareas tareas={tareasFiltradas} onSelect={t => {
+            setTareaSeleccionada(t)
+            setFiltrosAbiertos(false)
+            setNotifDetalle({})
+            setFuncEdit(t.funcionario_id ?? '')
+          }} />
         )}
       </div>
 
@@ -284,71 +327,95 @@ export default function Tareas() {
                 </div>
               )}
 
-              {/* Funcionario asignado + notificaciones */}
-              {sel.funcionario && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs text-slate-400 mb-2 font-medium">Funcionario asignado</p>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-sm font-medium text-slate-800">{sel.funcionario.nombre}</p>
-                    <p className="text-xs text-slate-500">{sel.funcionario.cargo}</p>
-                    <div className="flex gap-2 mt-3">
-                      {/* Correo */}
+              {/* Funcionario asignado — editable */}
+              {(() => {
+                const funcActual = sel.funcionario
+                const funcSeleccionado = funcionarios.find(f => f.id === funcEdit) ?? null
+                const cambio = funcEdit !== (sel.funcionario_id ?? '')
+                const waLink = funcSeleccionado ? waLinkDetalle(funcSeleccionado, sel) : null
+
+                return (
+                  <div className="border-t border-slate-100 pt-4">
+                    <p className="text-xs text-slate-400 mb-2 font-medium">Funcionario asignado</p>
+
+                    {/* Selector */}
+                    <select
+                      value={funcEdit ?? ''}
+                      onChange={e => { setFuncEdit(e.target.value); setNotifDetalle({}) }}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                                 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— Sin asignar —</option>
+                      {funcionarios.map(f => (
+                        <option key={f.id} value={f.id}>{f.nombre} · {f.cargo}</option>
+                      ))}
+                    </select>
+
+                    {/* Botón guardar — aparece solo si hay cambio */}
+                    {cambio && (
                       <button
-                        onClick={handleNotificarDetalle}
-                        disabled={!sel.funcionario.correo || notifDetalle.enviando}
-                        title={sel.funcionario.correo ?? 'Sin correo'}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
-                          text-xs font-medium border transition-colors
-                          ${notifDetalle.correoEnviado
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : sel.funcionario.correo
-                              ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
-                              : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                          }`}
+                        onClick={handleGuardarFuncionario}
+                        disabled={guardandoFunc}
+                        className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs
+                                   font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
                       >
-                        {notifDetalle.enviando ? '⏳' : notifDetalle.correoEnviado ? '✓' : '✉️'}
-                        {notifDetalle.correoEnviado ? 'Enviado' : 'Correo'}
+                        {guardandoFunc ? 'Guardando…' : funcEdit ? 'Guardar asignación' : 'Quitar funcionario'}
                       </button>
-                      {/* WhatsApp */}
-                      {(() => {
-                        const tel = (sel.funcionario.whatsapp ?? sel.funcionario.telefono ?? '')
-                          .replace(/[\s\-().+]/g, '')
-                        const num = tel.startsWith('57') ? tel : '57' + tel
-                        const fechaStr = sel.fecha_limite
-                          ? `Fecha límite: ${new Date(sel.fecha_limite).toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.`
-                          : ''
-                        const msg =
-                          `Hola ${sel.funcionario.nombre}, se te ha asignado la siguiente tarea en SecretaríaOS:\n\n` +
-                          `*Asunto:* ${sel.asunto}\n` +
-                          `*Tipo:* ${sel.tipo}\n` +
-                          (sel.remitente ? `*Remitente:* ${sel.remitente}\n` : '') +
-                          (fechaStr ? `*${fechaStr}*\n` : '') +
-                          (sel.descripcion ? `\n${sel.descripcion}` : '')
-                        const link = tel ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : null
-                        return (
+                    )}
+
+                    {/* Botones de notificación — aparecen cuando hay funcionario seleccionado */}
+                    {funcSeleccionado && !cambio && (
+                      <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                        <p className="text-xs text-slate-500 mb-2">
+                          Notificar a <span className="font-medium text-slate-700">{funcSeleccionado.nombre}</span>
+                        </p>
+                        <div className="flex gap-2">
+                          {/* Correo */}
+                          <button
+                            onClick={handleNotificarDetalle}
+                            disabled={!funcSeleccionado.correo || notifDetalle.enviando}
+                            title={funcSeleccionado.correo ?? 'Sin correo registrado'}
+                            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg
+                              text-xs font-medium border transition-colors
+                              ${notifDetalle.correoEnviado
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : funcSeleccionado.correo
+                                  ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                              }`}
+                          >
+                            {notifDetalle.enviando ? '⏳' : notifDetalle.correoEnviado ? '✓' : '✉️'}
+                            {notifDetalle.correoEnviado ? 'Enviado' : 'Correo'}
+                          </button>
+                          {/* WhatsApp */}
                           <a
-                            href={link ?? undefined}
+                            href={waLink ?? undefined}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={e => !link && e.preventDefault()}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+                            onClick={e => !waLink && e.preventDefault()}
+                            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg
                               text-xs font-medium border transition-colors no-underline
-                              ${link
+                              ${waLink
                                 ? 'bg-white text-slate-700 border-slate-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
                                 : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                               }`}
                           >
                             💬 WhatsApp
                           </a>
-                        )
-                      })()}
-                    </div>
-                    {notifDetalle.error && (
-                      <p className="text-xs text-red-600 mt-2">{notifDetalle.error}</p>
+                        </div>
+                        {notifDetalle.error && (
+                          <p className="text-xs text-red-600 mt-2">{notifDetalle.error}</p>
+                        )}
+                        {!funcSeleccionado.correo && !funcSeleccionado.whatsapp && (
+                          <p className="text-xs text-slate-400 mt-2">
+                            Sin correo ni WhatsApp — regístralos en Configuración.
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               <div className="border-t border-slate-100 pt-4">
                 <p className="text-xs text-slate-400 mb-2 font-medium">Cambiar estado</p>

@@ -192,7 +192,7 @@ export async function notificarAsignacion(funcionario, tarea) {
 
   // WhatsApp link
   let waLink = null
-  const tel = normalizarTelefono(funcionario.whatsapp ?? funcionario.telefono)
+  const tel = normalizarTelefono(funcionario.whatsapp)
   if (tel) {
     const fechaStr = tarea.fecha_limite
       ? `Fecha límite: ${formatFechaLarga(tarea.fecha_limite)}.`
@@ -229,7 +229,7 @@ export async function notificarDelegacion(funcionario, evento) {
 
   // WhatsApp link
   let waLink = null
-  const tel = normalizarTelefono(funcionario.whatsapp ?? funcionario.telefono)
+  const tel = normalizarTelefono(funcionario.whatsapp)
   if (tel) {
     const fechaStr = evento.fecha_inicio
       ? `${formatFechaLarga(evento.fecha_inicio)} ${formatHora(evento.fecha_inicio)}`

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 const TIPOS = ['planta', 'contratista']
 const TIPO_LABEL = { planta: 'Planta', contratista: 'Contratista' }
 
-const EMPTY = { nombre: '', cargo: '', tipo: 'planta', correo: '', telefono: '', whatsapp: '', activo: true }
+const EMPTY = { nombre: '', cargo: '', tipo: 'planta', correo: '', whatsapp: '', activo: true }
 
 const INPUT = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 w-full focus:outline-none focus:ring-2 focus:ring-blue-500'
 const SELECT = INPUT + ' bg-white'
@@ -40,9 +40,8 @@ export default function FormFuncionario({ inicial, onSubmit, onCancel, loading =
       nombre:   form.nombre.trim(),
       cargo:    form.cargo.trim(),
       tipo:     form.tipo,
-      correo:   form.correo.trim()    || null,
-      telefono: form.telefono.trim()  || null,
-      whatsapp: form.whatsapp.trim()  || null,
+      correo:   form.correo.trim()   || null,
+      whatsapp: form.whatsapp.trim() || null,
       activo:   form.activo,
     })
   }
@@ -70,25 +69,18 @@ export default function FormFuncionario({ inicial, onSubmit, onCancel, loading =
             {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
           </select>
         </Field>
-        <Field label="Teléfono">
-          <input className={INPUT} value={form.telefono}
-            onChange={e => set('telefono', e.target.value)}
-            placeholder="Ej: 311 234 5678" type="tel" />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Correo electrónico">
-          <input className={INPUT} value={form.correo}
-            onChange={e => set('correo', e.target.value)}
-            placeholder="Ej: funcionario@ocana.gov.co" type="email" />
-        </Field>
         <Field label="WhatsApp">
-          <input className={INPUT} value={form.whatsapp}
+          <input className={INPUT} value={form.whatsapp ?? ''}
             onChange={e => set('whatsapp', e.target.value)}
             placeholder="Ej: 311 234 5678" type="tel" />
         </Field>
       </div>
+
+      <Field label="Correo electrónico">
+        <input className={INPUT} value={form.correo}
+          onChange={e => set('correo', e.target.value)}
+          placeholder="Ej: funcionario@ocana.gov.co" type="email" />
+      </Field>
 
       {esEdicion && (
         <label className="flex items-center gap-2 cursor-pointer select-none">
