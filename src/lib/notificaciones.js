@@ -9,7 +9,7 @@
  */
 
 const RESEND_API = 'https://api.resend.com/emails'
-const FROM_EMAIL = 'SecretaríaOS <notificaciones@secretariaos.co>'
+const FROM_EMAIL = 'SecretaríaOS <notificaciones@ocanaturismo.com>'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
