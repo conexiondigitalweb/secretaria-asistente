@@ -19,14 +19,29 @@ function festivosDel(year) {
 }
 
 /**
- * Indica si una fecha es día no hábil (domingo o festivo colombiano).
- * Los sábados SÍ son hábiles en Colombia para efectos de derechos de petición.
+ * Construye la clave YYYY-MM-DD usando los getters locales de la fecha.
+ * Evita el bug de toISOString() que devuelve la fecha en UTC (un día menos en UTC-5).
+ * @param {Date} fecha
+ * @returns {string}
+ */
+function toLocalKey(fecha) {
+  const y = fecha.getFullYear()
+  const m = String(fecha.getMonth() + 1).padStart(2, '0')
+  const d = String(fecha.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/**
+ * Indica si una fecha es día no hábil.
+ * No hábiles: sábados, domingos y festivos colombianos.
+ * Solo cuentan lunes a viernes no festivos.
  * @param {Date} fecha
  * @returns {boolean}
  */
 function esNoHabil(fecha) {
-  if (fecha.getDay() === 0) return true // domingo
-  const key = fecha.toISOString().slice(0, 10)
+  const dia = fecha.getDay()
+  if (dia === 0 || dia === 6) return true // domingo o sábado
+  const key = toLocalKey(fecha)
   const year = fecha.getFullYear()
   // Cubrir festivos del año actual y del siguiente (fechas límite pueden cruzar año)
   return festivosDel(year).has(key) || festivosDel(year + 1).has(key)
@@ -34,8 +49,8 @@ function esNoHabil(fecha) {
 
 /**
  * Avanza una fecha el número de días hábiles indicado.
- * Excluye domingos y festivos colombianos (Ley 1755/2015 y Dto. 2591/1991).
- * Los sábados cuentan como hábiles.
+ * Excluye sábados, domingos y festivos colombianos (Ley 1755/2015 y Dto. 2591/1991).
+ * Solo cuentan lunes a viernes no festivos.
  * @param {Date} desde  Fecha de inicio (no se modifica)
  * @param {number} diasHabiles
  * @returns {Date}
