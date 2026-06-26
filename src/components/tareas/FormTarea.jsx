@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { calcularFechaLimite, DIAS_HABILES_LIMITE } from '../../lib/utils'
 import { verificarRadicado, vincularCorreoATarea } from '../../lib/tutelas'
+import { notificarAsignacion } from '../../lib/notificaciones'
+import { useFuncionarios } from '../../hooks/useFuncionarios'
 import AlertaDuplicado from './AlertaDuplicado'
 
 const TIPOS      = ['tutela', 'peticion', 'queja', 'solicitud', 'reunion', 'tarea', 'otro']
@@ -50,6 +52,7 @@ const EMPTY = {
   prioridad: 'media',
   dias_tutela: DIAS_TUTELA_LOCAL,
   radicado: '',
+  funcionario_id: '',
 }
 
 function Field({ label, required, hint, children }) {
@@ -76,12 +79,14 @@ const SELECT = INPUT + ' bg-white'
  * }} props
  */
 export default function FormTarea({ onSubmit, onCancel, loading = false, correoId }) {
+  const { funcionarios } = useFuncionarios({ soloActivos: true })
   const [form, setForm]             = useState(EMPTY)
   const [verificando, setVerificando] = useState(false)
   const [vinculando, setVinculando]   = useState(false)
   const [duplicado, setDuplicado]     = useState(null)   // tarea existente si hay duplicado
   const [errorMsg, setErrorMsg]       = useState(null)
   const [forzarNueva, setForzarNueva] = useState(false)  // usuario eligió crear de todas formas
+  const [notifState, setNotifState]   = useState({})     // { correoEnviado, waLink, enviando, error }
 
   function set(field, value) {
     setForm(prev => {
@@ -89,13 +94,42 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
       if (field === 'tipo' || field === 'fecha_recibido' || field === 'dias_tutela') {
         next.fecha_limite = recalcularLimite(next.tipo, next.fecha_recibido, next.dias_tutela)
       }
-      // Si cambia el radicado, limpiar estado de duplicado anterior
       if (field === 'radicado') {
         setDuplicado(null)
         setForzarNueva(false)
       }
+      // Al cambiar funcionario, precalcular wa link y resetear estado notif
+      if (field === 'funcionario_id') {
+        const f = funcionarios.find(fn => fn.id === value)
+        const tel = f ? normalizarTel(f.whatsapp ?? f.telefono) : null
+        setNotifState({ waLink: tel ? buildWaLink(f, next) : null, correoEnviado: false })
+      }
       return next
     })
+  }
+
+  function normalizarTel(tel) {
+    if (!tel) return null
+    const l = tel.replace(/[\s\-().+]/g, '')
+    if (l.startsWith('57') && l.length >= 12) return l
+    if (l.startsWith('0')) return '57' + l.slice(1)
+    return '57' + l
+  }
+
+  function buildWaLink(f, formData) {
+    const tel = normalizarTel(f.whatsapp ?? f.telefono)
+    if (!tel) return null
+    const fechaStr = formData.fecha_limite
+      ? `Fecha límite: ${new Date(parseFechaLocal(formData.fecha_limite)).toLocaleDateString('es-CO', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}.`
+      : ''
+    const msg =
+      `Hola ${f.nombre}, se te ha asignado la siguiente tarea en SecretaríaOS:\n\n` +
+      `*Asunto:* ${formData.asunto || '(sin asunto)'}\n` +
+      `*Tipo:* ${formData.tipo}\n` +
+      (formData.remitente ? `*Remitente:* ${formData.remitente}\n` : '') +
+      (fechaStr ? `*${fechaStr}*\n` : '') +
+      (formData.descripcion ? `\n${formData.descripcion}` : '')
+    return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`
   }
 
   async function handleSubmit(e) {
@@ -134,8 +168,33 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
       estado:         'pendiente',
       radicado:       form.tipo === 'tutela' && form.radicado.trim() ? form.radicado.trim() : null,
       correo_id:      correoId ?? null,
+      funcionario_id: form.funcionario_id || null,
     }
     onSubmit(data)
+  }
+
+  async function handleNotificarCorreo() {
+    const funcionario = funcionarios.find(f => f.id === form.funcionario_id)
+    if (!funcionario) return
+    setNotifState(s => ({ ...s, enviando: true, error: null }))
+    const { correo } = await notificarAsignacion(funcionario, {
+      asunto:       form.asunto,
+      tipo:         form.tipo,
+      remitente:    form.remitente,
+      descripcion:  form.descripcion,
+      fecha_limite: form.fecha_limite ? parseFechaLocal(form.fecha_limite).toISOString() : null,
+    })
+    setNotifState(s => ({
+      ...s,
+      enviando: false,
+      correoEnviado: correo.ok,
+      error: correo.ok ? null : correo.error,
+    }))
+  }
+
+  function handleNotificarWA() {
+    if (!notifState.waLink) return
+    window.open(notifState.waLink, '_blank', 'noopener,noreferrer')
   }
 
   async function handleVincular() {
@@ -296,6 +355,79 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
           />
         </Field>
       </div>
+
+      {/* Funcionario asignado */}
+      <Field label="Asignar a funcionario">
+        <select
+          className={SELECT}
+          value={form.funcionario_id}
+          onChange={e => set('funcionario_id', e.target.value)}
+        >
+          <option value="">— Sin asignar —</option>
+          {funcionarios.map(f => (
+            <option key={f.id} value={f.id}>{f.nombre} · {f.cargo}</option>
+          ))}
+        </select>
+
+        {/* Botones de notificación — aparecen cuando hay funcionario seleccionado */}
+        {form.funcionario_id && (() => {
+          const f = funcionarios.find(fn => fn.id === form.funcionario_id)
+          if (!f) return null
+          return (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-col gap-2">
+              <p className="text-xs font-medium text-slate-600">
+                Notificar a <span className="text-slate-800">{f.nombre}</span>
+              </p>
+              <div className="flex gap-2">
+                {/* Correo */}
+                <button
+                  type="button"
+                  disabled={!f.correo || notifState.enviando}
+                  onClick={handleNotificarCorreo}
+                  title={f.correo ? `Enviar a ${f.correo}` : 'Sin correo registrado'}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+                    text-xs font-medium border transition-colors
+                    ${notifState.correoEnviado
+                      ? 'bg-green-50 text-green-700 border-green-200'
+                      : f.correo
+                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                        : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                >
+                  {notifState.enviando ? '⏳' : notifState.correoEnviado ? '✓' : '✉️'}
+                  {notifState.correoEnviado ? 'Correo enviado' : 'Notificar por correo'}
+                </button>
+
+                {/* WhatsApp */}
+                <button
+                  type="button"
+                  disabled={!notifState.waLink}
+                  onClick={handleNotificarWA}
+                  title={notifState.waLink ? 'Abrir WhatsApp' : 'Sin teléfono registrado'}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+                    text-xs font-medium border transition-colors
+                    ${notifState.waLink
+                      ? 'bg-white text-slate-700 border-slate-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
+                      : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                >
+                  💬 Notificar por WhatsApp
+                </button>
+              </div>
+
+              {notifState.error && (
+                <p className="text-xs text-red-600">{notifState.error}</p>
+              )}
+              {!f.correo && !f.whatsapp && !f.telefono && (
+                <p className="text-xs text-slate-400">
+                  Este funcionario no tiene correo ni teléfono registrado.
+                  Agrégalos en Configuración.
+                </p>
+              )}
+            </div>
+          )
+        })()}
+      </Field>
 
       {/* Prioridad */}
       <Field label="Prioridad">

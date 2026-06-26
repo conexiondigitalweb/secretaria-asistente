@@ -5,6 +5,7 @@ import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
 import { formatFecha, diasRestantes, diasHabilesRestantes } from '../lib/utils'
+import { notificarAsignacion } from '../lib/notificaciones'
 
 const ESTADOS = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
 const TIPOS   = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
@@ -28,6 +29,7 @@ export default function Tareas() {
   const [guardando, setGuardando]           = useState(false)
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
   const [errorAccion, setErrorAccion]       = useState(null)
+  const [notifDetalle, setNotifDetalle]     = useState({}) // { enviando, correoEnviado, error }
 
   const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
 
@@ -53,6 +55,14 @@ export default function Tareas() {
     } finally {
       setGuardando(false)
     }
+  }
+
+  async function handleNotificarDetalle() {
+    const f = sel?.funcionario
+    if (!f) return
+    setNotifDetalle({ enviando: true, error: null })
+    const { correo } = await notificarAsignacion(f, sel)
+    setNotifDetalle({ enviando: false, correoEnviado: correo.ok, error: correo.ok ? null : correo.error })
   }
 
   async function handleActualizarEstado(id, estado) {
@@ -175,7 +185,7 @@ export default function Tareas() {
             ))}
           </div>
         ) : (
-          <TablaTareas tareas={tareasFiltradas} onSelect={t => { setTareaSeleccionada(t); setFiltrosAbiertos(false) }} />
+          <TablaTareas tareas={tareasFiltradas} onSelect={t => { setTareaSeleccionada(t); setFiltrosAbiertos(false); setNotifDetalle({}) }} />
         )}
       </div>
 
@@ -271,6 +281,72 @@ export default function Tareas() {
                 <div>
                   <p className="text-xs text-slate-400 mb-0.5">Origen</p>
                   <Badge value={sel.origen} />
+                </div>
+              )}
+
+              {/* Funcionario asignado + notificaciones */}
+              {sel.funcionario && (
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs text-slate-400 mb-2 font-medium">Funcionario asignado</p>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-sm font-medium text-slate-800">{sel.funcionario.nombre}</p>
+                    <p className="text-xs text-slate-500">{sel.funcionario.cargo}</p>
+                    <div className="flex gap-2 mt-3">
+                      {/* Correo */}
+                      <button
+                        onClick={handleNotificarDetalle}
+                        disabled={!sel.funcionario.correo || notifDetalle.enviando}
+                        title={sel.funcionario.correo ?? 'Sin correo'}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+                          text-xs font-medium border transition-colors
+                          ${notifDetalle.correoEnviado
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : sel.funcionario.correo
+                              ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                              : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                          }`}
+                      >
+                        {notifDetalle.enviando ? '⏳' : notifDetalle.correoEnviado ? '✓' : '✉️'}
+                        {notifDetalle.correoEnviado ? 'Enviado' : 'Correo'}
+                      </button>
+                      {/* WhatsApp */}
+                      {(() => {
+                        const tel = (sel.funcionario.whatsapp ?? sel.funcionario.telefono ?? '')
+                          .replace(/[\s\-().+]/g, '')
+                        const num = tel.startsWith('57') ? tel : '57' + tel
+                        const fechaStr = sel.fecha_limite
+                          ? `Fecha límite: ${new Date(sel.fecha_limite).toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.`
+                          : ''
+                        const msg =
+                          `Hola ${sel.funcionario.nombre}, se te ha asignado la siguiente tarea en SecretaríaOS:\n\n` +
+                          `*Asunto:* ${sel.asunto}\n` +
+                          `*Tipo:* ${sel.tipo}\n` +
+                          (sel.remitente ? `*Remitente:* ${sel.remitente}\n` : '') +
+                          (fechaStr ? `*${fechaStr}*\n` : '') +
+                          (sel.descripcion ? `\n${sel.descripcion}` : '')
+                        const link = tel ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : null
+                        return (
+                          <a
+                            href={link ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => !link && e.preventDefault()}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+                              text-xs font-medium border transition-colors no-underline
+                              ${link
+                                ? 'bg-white text-slate-700 border-slate-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                              }`}
+                          >
+                            💬 WhatsApp
+                          </a>
+                        )
+                      })()}
+                    </div>
+                    {notifDetalle.error && (
+                      <p className="text-xs text-red-600 mt-2">{notifDetalle.error}</p>
+                    )}
+                  </div>
                 </div>
               )}
 

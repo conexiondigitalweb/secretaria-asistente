@@ -14,7 +14,7 @@ export function useTareas() {
     setLoading(true)
     const { data, error } = await supabase
       .from('tareas')
-      .select('*')
+      .select('*, funcionario:funcionarios(id, nombre, cargo, correo, telefono, whatsapp)')
       .order('fecha_limite', { ascending: true })
     if (error) setError(error)
     else setTareas(data ?? [])
@@ -22,14 +22,23 @@ export function useTareas() {
   }
 
   async function crearTarea(tarea) {
-    const { data, error } = await supabase.from('tareas').insert([tarea]).select().single()
+    const { data, error } = await supabase
+      .from('tareas')
+      .insert([tarea])
+      .select('*, funcionario:funcionarios(id, nombre, cargo, correo, telefono, whatsapp)')
+      .single()
     if (error) throw error
     setTareas((prev) => [...prev, data])
     return data
   }
 
   async function actualizarTarea(id, cambios) {
-    const { data, error } = await supabase.from('tareas').update(cambios).eq('id', id).select().single()
+    const { data, error } = await supabase
+      .from('tareas')
+      .update(cambios)
+      .eq('id', id)
+      .select('*, funcionario:funcionarios(id, nombre, cargo, correo, telefono, whatsapp)')
+      .single()
     if (error) throw error
     setTareas((prev) => prev.map((t) => (t.id === id ? data : t)))
     return data
