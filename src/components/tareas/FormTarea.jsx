@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { calcularFechaLimite, DIAS_HABILES_LIMITE } from '../../lib/utils'
+import { verificarRadicado, vincularCorreoATarea } from '../../lib/tutelas'
+import AlertaDuplicado from './AlertaDuplicado'
 
-const TIPOS = ['tutela', 'peticion', 'queja', 'solicitud', 'reunion', 'tarea', 'otro']
-const ORIGENES = ['correo', 'fisico', 'verbal', 'whatsapp', 'otro']
+const TIPOS      = ['tutela', 'peticion', 'queja', 'solicitud', 'reunion', 'tarea', 'otro']
+const ORIGENES   = ['correo', 'fisico', 'verbal', 'whatsapp', 'otro']
 const PRIORIDADES = ['critica', 'alta', 'media', 'baja']
 
 const TIPO_LABEL = {
@@ -16,18 +18,26 @@ const PRIORIDAD_LABEL = {
   critica: 'Crítica', alta: 'Alta', media: 'Media', baja: 'Baja',
 }
 
-// Días hábiles locales para tutelas en Ocaña (ajustable si el juez fija término distinto)
 const DIAS_TUTELA_LOCAL = 2
 
 function toLocalDateString(date) {
-  // Construye YYYY-MM-DD en hora local, evitando el offset UTC
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
-const hoy = toLocalDateString(new Date())
+function parseFechaLocal(str) {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function recalcularLimite(tipo, fechaRecibido, diasTutela) {
+  if (!fechaRecibido) return ''
+  const override = tipo === 'tutela' ? Number(diasTutela) : undefined
+  const limite = calcularFechaLimite(tipo, parseFechaLocal(fechaRecibido), override)
+  return limite ? toLocalDateString(limite) : ''
+}
 
 const EMPTY = {
   tipo: 'peticion',
@@ -35,10 +45,11 @@ const EMPTY = {
   asunto: '',
   descripcion: '',
   remitente: '',
-  fecha_recibido: hoy,
+  fecha_recibido: toLocalDateString(new Date()),
   fecha_limite: '',
   prioridad: 'media',
   dias_tutela: DIAS_TUTELA_LOCAL,
+  radicado: '',
 }
 
 function Field({ label, required, hint, children }) {
@@ -53,61 +64,118 @@ function Field({ label, required, hint, children }) {
   )
 }
 
-const INPUT = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+const INPUT  = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 const SELECT = INPUT + ' bg-white'
 
 /**
- * Recalcula la fecha límite según tipo, fecha recibido y días override (solo tutelas).
+ * @param {{
+ *   onSubmit: (data: object) => void,
+ *   onCancel: () => void,
+ *   loading?: boolean,
+ *   correoId?: string,   — ID de Gmail si el form se abre desde un correo (Fase 3)
+ * }} props
  */
-function recalcularLimite(tipo, fechaRecibido, diasTutela) {
-  if (!fechaRecibido) return ''
-  // Para fecha_recibido que viene de <input type="date"> como "YYYY-MM-DD",
-  // construir Date en hora local para evitar desfase UTC
-  const [y, mo, d] = fechaRecibido.split('-').map(Number)
-  const desde = new Date(y, mo - 1, d)
-  const override = tipo === 'tutela' ? Number(diasTutela) : undefined
-  const limite = calcularFechaLimite(tipo, desde, override)
-  return limite ? toLocalDateString(limite) : ''
-}
-
-/**
- * @param {{ onSubmit: (data: object) => void, onCancel: () => void, loading?: boolean }} props
- */
-export default function FormTarea({ onSubmit, onCancel, loading = false }) {
-  const [form, setForm] = useState(EMPTY)
+export default function FormTarea({ onSubmit, onCancel, loading = false, correoId }) {
+  const [form, setForm]             = useState(EMPTY)
+  const [verificando, setVerificando] = useState(false)
+  const [vinculando, setVinculando]   = useState(false)
+  const [duplicado, setDuplicado]     = useState(null)   // tarea existente si hay duplicado
+  const [errorMsg, setErrorMsg]       = useState(null)
+  const [forzarNueva, setForzarNueva] = useState(false)  // usuario eligió crear de todas formas
 
   function set(field, value) {
     setForm(prev => {
       const next = { ...prev, [field]: value }
-
-      // Recalcular fecha límite cuando cambia tipo, fecha o días de tutela
       if (field === 'tipo' || field === 'fecha_recibido' || field === 'dias_tutela') {
         next.fecha_limite = recalcularLimite(next.tipo, next.fecha_recibido, next.dias_tutela)
       }
-
+      // Si cambia el radicado, limpiar estado de duplicado anterior
+      if (field === 'radicado') {
+        setDuplicado(null)
+        setForzarNueva(false)
+      }
       return next
     })
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
-    const [y, mo, d] = form.fecha_recibido.split('-').map(Number)
+    setErrorMsg(null)
+
+    // Verificar duplicado solo en tutelas con radicado, a menos que el usuario ya eligió forzar
+    if (form.tipo === 'tutela' && form.radicado.trim() && !forzarNueva) {
+      setVerificando(true)
+      const { tarea, error } = await verificarRadicado(form.radicado.trim())
+      setVerificando(false)
+
+      if (error) {
+        setErrorMsg('Error al verificar radicado: ' + error.message)
+        return
+      }
+      if (tarea) {
+        setDuplicado(tarea)
+        return  // Mostrar alerta — no continuar con la creación
+      }
+    }
+
+    guardarTarea()
+  }
+
+  function guardarTarea() {
     const data = {
-      ...form,
-      fecha_recibido: new Date(y, mo - 1, d).toISOString(),
-      fecha_limite: form.fecha_limite
-        ? (() => { const [fy,fm,fd] = form.fecha_limite.split('-').map(Number); return new Date(fy,fm-1,fd).toISOString() })()
-        : null,
-      estado: 'pendiente',
-      // dias_tutela es solo UI, no se persiste en BD
-      dias_tutela: undefined,
+      tipo:           form.tipo,
+      origen:         form.origen,
+      asunto:         form.asunto,
+      descripcion:    form.descripcion || null,
+      remitente:      form.remitente   || null,
+      fecha_recibido: parseFechaLocal(form.fecha_recibido).toISOString(),
+      fecha_limite:   form.fecha_limite ? parseFechaLocal(form.fecha_limite).toISOString() : null,
+      prioridad:      form.prioridad,
+      estado:         'pendiente',
+      radicado:       form.tipo === 'tutela' && form.radicado.trim() ? form.radicado.trim() : null,
+      correo_id:      correoId ?? null,
     }
     onSubmit(data)
   }
 
-  const esTutela = form.tipo === 'tutela'
+  async function handleVincular() {
+    if (!correoId || !duplicado) return
+    setVinculando(true)
+    const { error } = await vincularCorreoATarea(duplicado.id, correoId)
+    setVinculando(false)
+    if (error) {
+      setErrorMsg('Error al vincular: ' + error.message)
+      return
+    }
+    onCancel() // Cerrar formulario — ya se vinculó
+  }
+
+  function handleCrearNueva() {
+    setForzarNueva(true)
+    setDuplicado(null)
+    // Reenviar el submit sin verificación
+    guardarTarea()
+  }
+
+  const esTutela   = form.tipo === 'tutela'
   const diasDefault = DIAS_HABILES_LIMITE[form.tipo]
 
+  // ── Pantalla de duplicado ─────────────────────────────────────────────────
+  if (duplicado) {
+    return (
+      <AlertaDuplicado
+        tareaExistente={duplicado}
+        radicado={form.radicado.trim()}
+        correoId={correoId}
+        onVincular={handleVincular}
+        onCrearNueva={handleCrearNueva}
+        onCancelar={() => { setDuplicado(null); setForzarNueva(false) }}
+        vinculando={vinculando}
+      />
+    )
+  }
+
+  // ── Formulario normal ─────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
@@ -125,15 +193,15 @@ export default function FormTarea({ onSubmit, onCancel, loading = false }) {
         </Field>
       </div>
 
-      {/* Panel de término tutela — solo visible cuando tipo === tutela */}
+      {/* Panel tutela: término + radicado */}
       {esTutela && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex flex-col gap-2">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex flex-col gap-3">
+          {/* Término */}
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold text-red-700">⚖️ Término de tutela</p>
               <p className="text-xs text-red-500 mt-0.5">
-                Término legal: 10 días hábiles (Dto. 2591/1991).
-                Estándar local Ocaña: {DIAS_TUTELA_LOCAL} días hábiles.
+                Término legal: 10 días hábiles (Dto. 2591/1991). Estándar Ocaña: {DIAS_TUTELA_LOCAL} días.
                 Ajusta si el juez fija un término distinto.
               </p>
             </div>
@@ -148,6 +216,21 @@ export default function FormTarea({ onSubmit, onCancel, loading = false }) {
                 className="w-16 text-center border border-red-300 rounded-lg px-2 py-1.5 text-sm font-bold text-red-700 bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
               />
             </div>
+          </div>
+
+          {/* Radicado */}
+          <div className="border-t border-red-200 pt-3">
+            <Field
+              label="Número de radicado"
+              hint="Ej: 11001-22-03-000-2026-00123-00 — se verificará duplicado al guardar"
+            >
+              <input
+                className={`${INPUT} font-mono`}
+                placeholder="Ej: 54001-40-89-001-2026-00045-00"
+                value={form.radicado}
+                onChange={e => set('radicado', e.target.value)}
+              />
+            </Field>
           </div>
         </div>
       )}
@@ -237,6 +320,13 @@ export default function FormTarea({ onSubmit, onCancel, loading = false }) {
         </div>
       </Field>
 
+      {/* Error */}
+      {errorMsg && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {errorMsg}
+        </p>
+      )}
+
       {/* Acciones */}
       <div className="flex gap-2 pt-2 border-t border-slate-100">
         <button
@@ -248,10 +338,10 @@ export default function FormTarea({ onSubmit, onCancel, loading = false }) {
         </button>
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || verificando}
           className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Guardando…' : 'Guardar tarea'}
+          {verificando ? 'Verificando radicado…' : loading ? 'Guardando…' : 'Guardar tarea'}
         </button>
       </div>
     </form>
