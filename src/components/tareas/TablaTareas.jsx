@@ -1,16 +1,21 @@
 import Badge from '../ui/Badge'
-import { diasRestantes, formatFecha } from '../../lib/utils'
+import { diasHabilesRestantes, formatFecha } from '../../lib/utils'
 
-const TIPO_LABEL = {
-  tutela: 'Tutela', peticion: 'Petición', queja: 'Queja', solicitud: 'Solicitud',
-  reunion: 'Reunión', tarea: 'Tarea', otro: 'Otro',
-}
-
-function DiasRestantes({ fecha_limite }) {
-  const dias = diasRestantes(fecha_limite)
+function DiasHabiles({ fecha_limite }) {
+  const dias = diasHabilesRestantes(fecha_limite)
   if (dias === null) return <span className="text-slate-400 text-xs">—</span>
-  const label = dias === 0 ? 'Hoy' : dias < 0 ? `Hace ${Math.abs(dias)}d` : `${dias}d`
-  const color = dias < 0 ? 'text-red-600 font-semibold' : dias === 0 ? 'text-red-500 font-semibold' : dias <= 3 ? 'text-orange-500 font-medium' : 'text-slate-500'
+  const label = dias === 0
+    ? 'Hoy'
+    : dias < 0
+      ? `Hace ${Math.abs(dias)}d háb.`
+      : `${dias}d háb.`
+  const color = dias < 0
+    ? 'text-red-600 font-semibold'
+    : dias === 0
+      ? 'text-red-500 font-semibold'
+      : dias <= 3
+        ? 'text-orange-500 font-medium'
+        : 'text-slate-500'
   return <span className={`text-xs ${color}`}>{label}</span>
 }
 
@@ -44,9 +49,7 @@ export default function TablaTareas({ tareas, onSelect }) {
               onClick={() => onSelect(t)}
               className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
             >
-              <td className="px-3 py-3">
-                <Badge value={t.tipo} />
-              </td>
+              <td className="px-3 py-3"><Badge value={t.tipo} /></td>
               <td className="px-3 py-3 max-w-xs">
                 <p className="font-medium text-slate-800 truncate">{t.asunto}</p>
               </td>
@@ -55,15 +58,11 @@ export default function TablaTareas({ tareas, onSelect }) {
               <td className="px-3 py-3 whitespace-nowrap">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-xs text-slate-500">{formatFecha(t.fecha_limite)}</span>
-                  <DiasRestantes fecha_limite={t.fecha_limite} />
+                  <DiasHabiles fecha_limite={t.fecha_limite} />
                 </div>
               </td>
-              <td className="px-3 py-3">
-                <Badge value={t.estado} />
-              </td>
-              <td className="px-3 py-3">
-                <Badge value={t.prioridad} />
-              </td>
+              <td className="px-3 py-3"><Badge value={t.estado} /></td>
+              <td className="px-3 py-3"><Badge value={t.prioridad} /></td>
             </tr>
           ))}
         </tbody>

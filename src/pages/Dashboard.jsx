@@ -3,7 +3,7 @@ import TareaUrgente from '../components/dashboard/TareaUrgente'
 import EventoHoy from '../components/dashboard/EventoHoy'
 import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
-import { diasRestantes } from '../lib/utils'
+import { diasHabilesRestantes } from '../lib/utils'
 
 function saludo() {
   const h = new Date().getHours()
@@ -26,16 +26,16 @@ export default function Dashboard() {
   const activas    = tareas.filter(t => t.estado !== 'resuelto')
   const pendientes = activas.length
   const criticas   = activas.filter(t => t.prioridad === 'critica').length
-  const vencenHoy  = activas.filter(t => diasRestantes(t.fecha_limite) === 0).length
+  const vencenHoy  = activas.filter(t => diasHabilesRestantes(t.fecha_limite) === 0).length
   const vencidas   = activas.filter(t => {
-    const d = diasRestantes(t.fecha_limite)
+    const d = diasHabilesRestantes(t.fecha_limite)
     return d !== null && d < 0
   }).length
 
   // Top 5 más urgentes por fecha límite
   const urgentes = [...activas]
     .filter(t => t.fecha_limite)
-    .sort((a, b) => diasRestantes(a.fecha_limite) - diasRestantes(b.fecha_limite))
+    .sort((a, b) => diasHabilesRestantes(a.fecha_limite) - diasHabilesRestantes(b.fecha_limite))
     .slice(0, 5)
 
   // Eventos de hoy y mañana

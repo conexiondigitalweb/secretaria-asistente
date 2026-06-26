@@ -4,7 +4,7 @@ import FormTarea from '../components/tareas/FormTarea'
 import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
-import { formatFecha, diasRestantes } from '../lib/utils'
+import { formatFecha, diasRestantes, diasHabilesRestantes } from '../lib/utils'
 
 const ESTADOS = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
 const TIPOS   = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
@@ -187,7 +187,7 @@ export default function Tareas() {
                 <p className="text-xs text-slate-400 mb-0.5">Fecha límite</p>
                 <p className="text-sm text-slate-700">{formatFecha(sel.fecha_limite)}</p>
                 {sel.fecha_limite && (() => {
-                  const d = diasRestantes(sel.fecha_limite)
+                  const d = diasHabilesRestantes(sel.fecha_limite)
                   if (d === null) return null
                   const color = d < 0 ? 'text-red-600' : d <= 3 ? 'text-orange-500' : 'text-slate-400'
                   const label = d < 0

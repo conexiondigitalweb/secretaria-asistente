@@ -1,21 +1,112 @@
-// Días límite por tipo de solicitud (Colombia)
-const DIAS_LIMITE = {
-  tutela: 10,    // Decreto 2591/1991 — improrrogable
-  peticion: 15,  // Ley 1755/2015
-  queja: 15,
-  solicitud: 15,
-  reunion: null,
-  tarea: null,
+import getColombiaHolidays from 'colombia-holiday'
+
+// ─── Cache de festivos por año ───────────────────────────────────────────────
+// Evita recalcular el mismo año repetidamente
+const _cacheFestivos = {}
+
+/**
+ * Retorna un Set con las fechas festivas del año dado en formato 'YYYY-MM-DD'.
+ * Usa la fecha de celebración real (holiday), no la fecha de origen.
+ * @param {number} year
+ * @returns {Set<string>}
+ */
+function festivosDel(year) {
+  if (_cacheFestivos[year]) return _cacheFestivos[year]
+  const lista = getColombiaHolidays(year)
+  const set = new Set(lista.map(f => f.holiday.replaceAll('/', '-')))
+  _cacheFestivos[year] = set
+  return set
 }
 
-export function calcularFechaLimite(tipo, fechaRecibido) {
-  const dias = DIAS_LIMITE[tipo]
-  if (!dias) return null
-  const fecha = new Date(fechaRecibido)
-  fecha.setDate(fecha.getDate() + dias)
+/**
+ * Indica si una fecha es día no hábil (domingo o festivo colombiano).
+ * Los sábados SÍ son hábiles en Colombia para efectos de derechos de petición.
+ * @param {Date} fecha
+ * @returns {boolean}
+ */
+function esNoHabil(fecha) {
+  if (fecha.getDay() === 0) return true // domingo
+  const key = fecha.toISOString().slice(0, 10)
+  const year = fecha.getFullYear()
+  // Cubrir festivos del año actual y del siguiente (fechas límite pueden cruzar año)
+  return festivosDel(year).has(key) || festivosDel(year + 1).has(key)
+}
+
+/**
+ * Avanza una fecha el número de días hábiles indicado.
+ * Excluye domingos y festivos colombianos (Ley 1755/2015 y Dto. 2591/1991).
+ * Los sábados cuentan como hábiles.
+ * @param {Date} desde  Fecha de inicio (no se modifica)
+ * @param {number} diasHabiles
+ * @returns {Date}
+ */
+function sumarDiasHabiles(desde, diasHabiles) {
+  const fecha = new Date(desde)
+  fecha.setHours(0, 0, 0, 0)
+  let contados = 0
+  while (contados < diasHabiles) {
+    fecha.setDate(fecha.getDate() + 1)
+    if (!esNoHabil(fecha)) contados++
+  }
   return fecha
 }
 
+// ─── Días hábiles límite por tipo (Colombia) ─────────────────────────────────
+const DIAS_HABILES_LIMITE = {
+  tutela:   10,  // Decreto 2591/1991 — días hábiles, improrrogable
+  peticion: 15,  // Ley 1755/2015 — días hábiles
+  queja:    15,  // Ley 1755/2015
+  solicitud: 15, // Ley 1755/2015
+  reunion:  null,
+  tarea:    null,
+}
+
+/**
+ * Calcula la fecha límite de respuesta según el tipo de solicitud,
+ * contando días hábiles reales (excluye domingos y festivos colombianos).
+ * @param {string} tipo
+ * @param {string|Date} fechaRecibido
+ * @returns {Date|null}
+ */
+export function calcularFechaLimite(tipo, fechaRecibido) {
+  const dias = DIAS_HABILES_LIMITE[tipo]
+  if (!dias || !fechaRecibido) return null
+  return sumarDiasHabiles(new Date(fechaRecibido), dias)
+}
+
+/**
+ * Cuenta los días hábiles que quedan entre hoy y la fecha límite.
+ * Retorna negativo si ya venció, 0 si vence hoy, null si no hay fecha.
+ * @param {string|Date|null} fechaLimite
+ * @returns {number|null}
+ */
+export function diasHabilesRestantes(fechaLimite) {
+  if (!fechaLimite) return null
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const limite = new Date(fechaLimite)
+  limite.setHours(0, 0, 0, 0)
+
+  if (limite.getTime() === hoy.getTime()) return 0
+
+  const signo = limite > hoy ? 1 : -1
+  const [desde, hasta] = limite > hoy ? [hoy, limite] : [limite, hoy]
+  let count = 0
+  const cursor = new Date(desde)
+  while (cursor < hasta) {
+    cursor.setDate(cursor.getDate() + 1)
+    if (!esNoHabil(cursor)) count++
+  }
+  return signo * count
+}
+
+// ─── Helpers de presentación ──────────────────────────────────────────────────
+
+/**
+ * Formatea una fecha en español colombiano: "26 jun. 2026"
+ * @param {string|Date|null} fecha
+ * @returns {string}
+ */
 export function formatFecha(fecha) {
   if (!fecha) return '—'
   return new Intl.DateTimeFormat('es-CO', {
@@ -25,6 +116,11 @@ export function formatFecha(fecha) {
   }).format(new Date(fecha))
 }
 
+/**
+ * Días corridos restantes (para mostrar en UI junto a días hábiles).
+ * @param {string|Date|null} fechaLimite
+ * @returns {number|null}
+ */
 export function diasRestantes(fechaLimite) {
   if (!fechaLimite) return null
   const hoy = new Date()

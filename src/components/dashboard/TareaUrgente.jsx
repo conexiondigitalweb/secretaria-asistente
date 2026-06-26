@@ -1,4 +1,4 @@
-import { diasRestantes, formatFecha } from '../../lib/utils'
+import { diasHabilesRestantes, formatFecha } from '../../lib/utils'
 
 const TIPO_LABEL = {
   tutela:   'Tutela',
@@ -21,10 +21,17 @@ const PRIORIDAD_COLOR = {
  * @param {{ tarea: object }} props
  */
 export default function TareaUrgente({ tarea }) {
-  const dias = diasRestantes(tarea.fecha_limite)
+  const dias = diasHabilesRestantes(tarea.fecha_limite)
 
   let diasColor = 'text-slate-500'
-  let diasLabel = dias === null ? '—' : dias === 0 ? 'Vence hoy' : dias < 0 ? `Venció hace ${Math.abs(dias)}d` : `${dias}d restantes`
+  let diasLabel = dias === null
+    ? '—'
+    : dias === 0
+      ? 'Vence hoy'
+      : dias < 0
+        ? `Venció hace ${Math.abs(dias)}d hábiles`
+        : `${dias}d hábiles`
+
   if (dias !== null && dias <= 0) diasColor = 'text-red-600 font-semibold'
   else if (dias !== null && dias <= 3) diasColor = 'text-orange-500 font-medium'
 
