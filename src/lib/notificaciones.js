@@ -8,8 +8,9 @@
  * WhatsApp: genera link wa.me con mensaje prellenado (no requiere API).
  */
 
-const RESEND_API = 'https://api.resend.com/emails'
-const FROM_EMAIL = 'SecretaríaOS <notificaciones@ocanaturismo.com>'
+// El envío se hace a través de /api/send-email (Vercel Serverless Function)
+// para evitar el bloqueo CORS de Resend al llamar desde el navegador.
+// La RESEND_API_KEY vive solo en el servidor — no se expone al cliente.
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,23 +47,14 @@ function encodeWA(texto) {
 }
 
 async function enviarCorreo({ to, subject, html }) {
-  const apiKey = import.meta.env.VITE_RESEND_API_KEY
-  if (!apiKey) {
-    console.warn('[notificaciones] VITE_RESEND_API_KEY no configurada — correo omitido')
-    return { ok: false, error: 'API key de Resend no configurada' }
-  }
-
   try {
-    const res = await fetch(RESEND_API, {
+    const res = await fetch('/api/send-email', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, html }),
     })
     const data = await res.json()
-    if (!res.ok) return { ok: false, error: data?.message ?? 'Error Resend' }
+    if (!res.ok) return { ok: false, error: data?.error ?? 'Error al enviar correo' }
     return { ok: true, id: data.id }
   } catch (e) {
     return { ok: false, error: e.message }
