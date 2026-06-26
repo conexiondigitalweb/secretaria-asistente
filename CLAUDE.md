@@ -18,7 +18,7 @@
 - **Entidad:** Secretaría de Educación, Cultura y Turismo — Municipio de Ocaña, Norte de Santander, Colombia
 - **Secretario:** Doiler Alfonso Sanjuán Sánchez
 - **Asistente:** (por definir, acceso nivel asistente)
-- **Correo hub Gmail:** (configurar: secretaria.ocana.hub@gmail.com o similar)
+- **Correo hub Gmail:** sectocana@gmail.com
 - **Correo institucional:** @ocana-nortedesantander.gov.co (Gobierno Digital Colombia / Google Workspace MinTIC)
 
 ---
