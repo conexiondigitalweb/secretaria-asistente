@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Proyectos\\\\secretaria-asistente\\\\supabase\\\\migrations\")",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "PowerShell(cd \"C:\\\\Proyectos\\\\secretaria-asistente\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"npm run dev\" -WindowStyle Normal; Start-Sleep -Seconds 6; Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty StatusCode)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Bash(powershell -Command ' *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

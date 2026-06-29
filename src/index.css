@@ -1,16 +1,56 @@
 @import "tailwindcss";
 
+/* ── Paleta institucional — Alcaldía de Ocaña ───────────────────────── */
+@theme {
+  /* Verde institucional */
+  --color-primary:            #1a7a2e;
+  --color-primary-hover:      #155f24;
+  --color-primary-light:      #e8f5e9;
+  --color-primary-lighter:    #f1faf2;
+  --color-primary-foreground: #ffffff;
+
+  /* Destructivo */
+  --color-destructive:            #dc2626;
+  --color-destructive-hover:      #b91c1c;
+  --color-destructive-foreground: #ffffff;
+
+  /* Superficie */
+  --color-surface:    #ffffff;
+  --color-surface-2:  #f8fafc;
+  --color-surface-3:  #f1f5f9;
+
+  /* Bordes */
+  --color-border:       #e2e8f0;
+  --color-border-input: #cbd5e1;
+
+  /* Texto */
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted:     #94a3b8;
+
+  /* Ring */
+  --color-ring: #1a7a2e;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   background-color: #f8fafc;
-  color: #1e293b;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
   min-height: 100svh;
+}
+
+/* ── Focus ring global ──────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #1a7a2e;
+  outline-offset: 2px;
 }

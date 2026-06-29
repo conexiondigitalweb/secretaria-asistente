@@ -67,7 +67,7 @@ function Field({ label, required, hint, children }) {
   )
 }
 
-const INPUT  = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+const INPUT  = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'
 const SELECT = INPUT + ' bg-white'
 
 /**
@@ -390,7 +390,7 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
                     ${notifState.correoEnviado
                       ? 'bg-green-50 text-green-700 border-green-200'
                       : f.correo
-                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-primary-light hover:border-primary/30 hover:text-primary'
                         : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                     }`}
                 >
@@ -471,7 +471,7 @@ export default function FormTarea({ onSubmit, onCancel, loading = false, correoI
         <button
           type="submit"
           disabled={loading || verificando}
-          className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors"
         >
           {verificando ? 'Verificando radicado…' : loading ? 'Guardando…' : 'Guardar tarea'}
         </button>

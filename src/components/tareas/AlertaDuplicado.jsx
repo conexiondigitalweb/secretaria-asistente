@@ -71,7 +71,7 @@ export default function AlertaDuplicado({
           <button
             onClick={onVincular}
             disabled={vinculando}
-            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-sm font-medium transition-colors"
           >
             {vinculando ? 'Vinculando…' : '🔗 Vincular este correo a la tarea existente'}
           </button>

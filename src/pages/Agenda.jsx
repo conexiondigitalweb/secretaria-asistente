@@ -4,7 +4,7 @@ import FormEvento from '../components/agenda/FormEvento'
 import Modal from '../components/ui/Modal'
 
 const TIPO_BADGE = {
-  reunion:      'bg-blue-50 text-blue-700 border-blue-200',
+  reunion:      'bg-primary-light text-primary border-primary/20',
   compromiso:   'bg-purple-50 text-purple-700 border-purple-200',
   recordatorio: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   evento:       'bg-green-50 text-green-700 border-green-200',
@@ -46,7 +46,7 @@ function EventoCard({ evento, onEditar, onEliminar }) {
   const esHoy = new Date(evento.fecha_inicio).toDateString() === hoy
   return (
     <div className={`flex gap-3 p-3 rounded-xl border transition-shadow hover:shadow-sm
-      ${esHoy ? 'border-blue-200 bg-blue-50/30' : 'border-slate-100 bg-white'}`}>
+      ${esHoy ? 'border-primary/20 bg-primary-light/30' : 'border-slate-100 bg-white'}`}>
 
       {/* Icon */}
       <div className="text-xl shrink-0 mt-0.5">{TIPO_ICON[evento.tipo] ?? '📅'}</div>
@@ -84,7 +84,7 @@ function EventoCard({ evento, onEditar, onEliminar }) {
       {/* Acciones */}
       <div className="flex flex-col gap-1 shrink-0">
         <button onClick={() => onEditar(evento)}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary-light transition-colors"
           title="Editar">✏️</button>
         <button onClick={() => onEliminar(evento)}
           className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -170,7 +170,7 @@ export default function Agenda() {
           </p>
         </div>
         <button onClick={abrirCrear}
-          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white
+          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white
                      text-sm font-medium px-3 py-2 rounded-lg transition-colors">
           <span className="text-base leading-none">+</span>
           <span className="hidden sm:inline">Nuevo evento</span>
@@ -187,7 +187,7 @@ export default function Agenda() {
         ].map(({ value, label }) => (
           <button key={value} onClick={() => setFiltro(value)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filtro === value ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+              filtro === value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
             }`}>
             {label}
           </button>
@@ -227,12 +227,12 @@ export default function Agenda() {
 
             return (
               <div key={key}>
-                <div className={`flex items-center gap-2 mb-2 ${esHoy ? 'text-blue-600' : 'text-slate-500'}`}>
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${esHoy ? 'text-blue-600' : ''}`}>
+                <div className={`flex items-center gap-2 mb-2 ${esHoy ? 'text-primary' : 'text-slate-500'}`}>
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${esHoy ? 'text-primary' : ''}`}>
                     {labelDia}
                   </span>
                   {esHoy && (
-                    <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-medium">HOY</span>
+                    <span className="text-xs bg-primary text-white px-1.5 py-0.5 rounded-full font-medium">HOY</span>
                   )}
                   <div className="flex-1 h-px bg-slate-100" />
                   <span className="text-xs text-slate-400">{evs.length} evento{evs.length !== 1 ? 's' : ''}</span>

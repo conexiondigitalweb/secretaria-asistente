@@ -39,7 +39,7 @@ export default function Login() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="usuario@ocana.gov.co"
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
@@ -51,7 +51,7 @@ export default function Login() {
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
@@ -66,7 +66,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+            className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-sm font-medium transition-colors"
           >
             {loading ? 'Ingresando…' : 'Ingresar'}
           </button>

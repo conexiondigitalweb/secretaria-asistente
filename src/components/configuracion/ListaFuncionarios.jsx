@@ -1,7 +1,7 @@
 const TIPO_LABEL = { planta: 'Planta', contratista: 'Contratista' }
 
 const TIPO_BADGE = {
-  planta:      'bg-blue-50 text-blue-700 border-blue-200',
+  planta:      'bg-primary-light text-primary border-primary/20',
   contratista: 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
@@ -32,7 +32,7 @@ export default function ListaFuncionarios({ funcionarios, onEditar, onToggleActi
           {/* Avatar inicial */}
           <div className={`w-9 h-9 rounded-full flex items-center justify-center
                            text-sm font-bold shrink-0
-                           ${f.activo ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                           ${f.activo ? 'bg-primary-light text-primary' : 'bg-slate-100 text-slate-400'}`}>
             {f.nombre.charAt(0).toUpperCase()}
           </div>
 
@@ -63,7 +63,7 @@ export default function ListaFuncionarios({ funcionarios, onEditar, onToggleActi
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => onEditar(f)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary-light transition-colors"
               title="Editar"
             >
               ✏️

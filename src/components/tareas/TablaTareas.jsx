@@ -1,9 +1,10 @@
 import Badge from '../ui/Badge'
 import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto } from '../../lib/utils'
+import { cn } from '../../lib/cn'
 
 function DiasHabiles({ fecha_limite }) {
   const dias = diasHabilesRestantes(fecha_limite)
-  if (dias === null) return <span className="text-slate-400 text-xs">—</span>
+  if (dias === null) return <span className="text-text-muted text-xs">—</span>
   const hoyExacto = esHoy(fecha_limite)
   const label = dias < 0
     ? `Hace ${Math.abs(dias)}d háb.`
@@ -18,8 +19,8 @@ function DiasHabiles({ fecha_limite }) {
       ? 'text-orange-500 font-semibold'
       : dias <= 3
         ? 'text-orange-500 font-medium'
-        : 'text-slate-500'
-  return <span className={`text-xs ${color}`}>{label}</span>
+        : 'text-text-muted'
+  return <span className={cn('text-xs', color)}>{label}</span>
 }
 
 /**
@@ -28,7 +29,7 @@ function DiasHabiles({ fecha_limite }) {
 export default function TablaTareas({ tareas, onSelect }) {
   if (tareas.length === 0) {
     return (
-      <div className="text-center py-16 text-slate-400">
+      <div className="text-center py-16 text-text-muted">
         <p className="text-4xl mb-3">📋</p>
         <p className="text-sm">No hay tareas con los filtros actuales</p>
       </div>
@@ -36,36 +37,53 @@ export default function TablaTareas({ tareas, onSelect }) {
   }
 
   return (
-    <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
-      <table className="w-full text-sm min-w-[640px]">
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[680px]">
         <thead>
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-border bg-surface-2">
             {['Tipo', 'Asunto', 'Remitente', 'Recibido', 'Límite', 'Estado', 'Prioridad'].map(h => (
-              <th key={h} className="text-left text-xs font-semibold text-slate-500 px-3 py-2 whitespace-nowrap">{h}</th>
+              <th
+                key={h}
+                className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide
+                           px-4 py-3 whitespace-nowrap first:pl-5"
+              >
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-border">
           {tareas.map(t => (
             <tr
               key={t.id}
               onClick={() => onSelect(t)}
-              className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+              className="hover:bg-primary-lighter cursor-pointer transition-colors group"
             >
-              <td className="px-3 py-3"><Badge value={t.tipo} /></td>
-              <td className="px-3 py-3 max-w-xs">
-                <p className="font-medium text-slate-800 truncate">{t.asunto}</p>
+              <td className="px-4 py-3.5 first:pl-5">
+                <Badge value={t.tipo} />
               </td>
-              <td className="px-3 py-3 text-slate-500 whitespace-nowrap">{t.remitente || '—'}</td>
-              <td className="px-3 py-3 text-slate-500 whitespace-nowrap text-xs">{formatFecha(t.fecha_recibido)}</td>
-              <td className="px-3 py-3 whitespace-nowrap">
+              <td className="px-4 py-3.5 max-w-xs">
+                <p className="font-medium text-text-primary truncate group-hover:text-primary transition-colors">
+                  {t.asunto}
+                </p>
+                {t.radicado && (
+                  <p className="text-[11px] font-mono text-text-muted truncate mt-0.5">{t.radicado}</p>
+                )}
+              </td>
+              <td className="px-4 py-3.5 text-text-secondary whitespace-nowrap text-xs">
+                {t.remitente || <span className="text-text-muted">—</span>}
+              </td>
+              <td className="px-4 py-3.5 text-text-muted whitespace-nowrap text-xs">
+                {formatFecha(t.fecha_recibido)}
+              </td>
+              <td className="px-4 py-3.5 whitespace-nowrap">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-slate-500">{formatFecha(t.fecha_limite)}</span>
+                  <span className="text-xs text-text-secondary">{formatFecha(t.fecha_limite)}</span>
                   <DiasHabiles fecha_limite={t.fecha_limite} />
                 </div>
               </td>
-              <td className="px-3 py-3"><Badge value={t.estado} /></td>
-              <td className="px-3 py-3"><Badge value={t.prioridad} /></td>
+              <td className="px-4 py-3.5"><Badge value={t.estado} /></td>
+              <td className="px-4 py-3.5"><Badge value={t.prioridad} /></td>
             </tr>
           ))}
         </tbody>

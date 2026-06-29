@@ -6,7 +6,7 @@ const TIPO_LABEL = {
   reunion: 'Reunión', compromiso: 'Compromiso', recordatorio: 'Recordatorio', evento: 'Evento',
 }
 
-const INPUT  = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 w-full focus:outline-none focus:ring-2 focus:ring-blue-500'
+const INPUT  = 'border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 w-full focus:outline-none focus:ring-2 focus:ring-primary'
 const SELECT = INPUT + ' bg-white'
 
 function Field({ label, required, children }) {
@@ -163,8 +163,8 @@ export default function FormEvento({ inicial, onSubmit, onCancel, loading = fals
           Cancelar
         </button>
         <button type="submit" disabled={loading}
-          className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium
-                     hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium
+                     hover:bg-primary-hover disabled:opacity-50 transition-colors">
           {loading ? 'Guardando…' : inicial ? 'Guardar cambios' : 'Crear evento'}
         </button>
       </div>

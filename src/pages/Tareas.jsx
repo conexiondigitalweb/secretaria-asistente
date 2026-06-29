@@ -139,7 +139,7 @@ export default function Tareas() {
             onClick={() => setFiltrosAbiertos(v => !v)}
             className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors
               ${hayFiltros
-                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                ? 'border-primary/30 bg-primary-light text-primary'
                 : 'border-slate-200 text-slate-600'
               }`}
           >
@@ -148,7 +148,7 @@ export default function Tareas() {
           </button>
           <button
             onClick={() => { setModalNueva(true); setErrorAccion(null) }}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white
                        text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors"
           >
             <span className="text-base leading-none">+</span>
@@ -178,14 +178,14 @@ export default function Tareas() {
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             className="w-full md:w-64 border border-slate-200 rounded-lg px-3 py-1.5
-                       text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <div className="flex gap-2">
             <select
               value={filtroEstado}
               onChange={e => setFiltroEstado(e.target.value)}
               className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
-                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {ESTADOS.map(e => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
             </select>
@@ -193,7 +193,7 @@ export default function Tareas() {
               value={filtroTipo}
               onChange={e => setFiltroTipo(e.target.value)}
               className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
-                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
             </select>
@@ -351,7 +351,7 @@ export default function Tareas() {
                       value={funcEdit ?? ''}
                       onChange={e => { setFuncEdit(e.target.value); setNotifDetalle({}) }}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
-                                 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary"
                     >
                       <option value="">— Sin asignar —</option>
                       {funcionarios.map(f => (
@@ -364,8 +364,8 @@ export default function Tareas() {
                       <button
                         onClick={handleGuardarFuncionario}
                         disabled={guardandoFunc}
-                        className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs
-                                   font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="mt-2 w-full py-1.5 rounded-lg bg-primary text-white text-xs
+                                   font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors"
                       >
                         {guardandoFunc ? 'Guardando…' : funcEdit ? 'Guardar asignación' : 'Quitar funcionario'}
                       </button>
@@ -388,7 +388,7 @@ export default function Tareas() {
                               ${notifDetalle.correoEnviado
                                 ? 'bg-green-50 text-green-700 border-green-200'
                                 : funcSeleccionado.correo
-                                  ? 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                                  ? 'bg-white text-slate-700 border-slate-200 hover:bg-primary-light hover:border-primary/30 hover:text-primary'
                                   : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                               }`}
                           >

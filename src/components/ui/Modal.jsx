@@ -1,34 +1,33 @@
-import { useEffect } from 'react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
+} from './dialog'
+import { cn } from '../../lib/cn'
 
 /**
+ * Modal wrapper sobre shadcn/ui Dialog.
+ * Mantiene la misma API pública para no romper ningún componente existente.
+ *
  * @param {{ open: boolean, onClose: () => void, title: string, children: React.ReactNode, width?: string }} props
  */
 export default function Modal({ open, onClose, title, children, width = 'max-w-xl' }) {
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
-
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative bg-white rounded-xl shadow-xl w-full ${width} max-h-[90vh] flex flex-col`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
-            aria-label="Cerrar"
-          >
-            ×
-          </button>
-        </div>
-        <div className="overflow-y-auto p-5">{children}</div>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className={cn('w-full', width)} showClose={false}>
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>{title}</DialogTitle>
+            <button
+              onClick={onClose}
+              className="rounded-md p-1 text-text-muted hover:text-text-primary
+                         hover:bg-surface-3 transition-colors text-lg leading-none"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </DialogHeader>
+        <DialogBody>{children}</DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }

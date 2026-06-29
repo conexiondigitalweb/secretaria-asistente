@@ -88,7 +88,7 @@ export default function Configuracion() {
           </div>
           <button
             onClick={abrirCrear}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white
                        text-sm font-medium px-3 py-2 rounded-lg transition-colors"
           >
             <span className="text-base leading-none">+</span>
@@ -109,7 +109,7 @@ export default function Configuracion() {
               onClick={() => setFiltro(value)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                 filtro === value
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-primary text-white'
                   : 'text-slate-500 hover:bg-slate-100'
               }`}
             >
