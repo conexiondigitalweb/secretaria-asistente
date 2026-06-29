@@ -73,7 +73,7 @@ export default function Dashboard() {
           <img
             src="/logo-secretaria.jpg"
             alt=""
-            className="hidden sm:block h-12 w-12 rounded-lg object-cover opacity-80 shadow-sm"
+            className="hidden sm:block h-14 w-14 object-contain opacity-90"
           />
         </div>
 

@@ -44,7 +44,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-surface-2 flex items-center justify-center">
         <div className="text-center">
-          <img src="/logo-secretaria.jpg" alt="Logo" className="h-16 mx-auto mb-4 opacity-70 rounded-lg" />
+          <img src="/logo-secretaria.jpg" alt="Logo" className="h-16 mx-auto mb-4 opacity-70 object-contain" />
           <p className="text-sm text-text-muted">Cargando SecretaríaOS…</p>
         </div>
       </div>
@@ -66,8 +66,8 @@ export default function App() {
           <div className="flex items-center gap-3">
             <img
               src="/logo-secretaria.jpg"
-              alt="Secretaría de Educación"
-              className="h-10 w-10 rounded-lg object-cover shrink-0 shadow-sm"
+              alt="Escudo Alcaldía de Ocaña"
+              className="h-12 w-12 object-contain shrink-0"
             />
             <div className="min-w-0">
               <p className="text-xs font-bold text-primary leading-tight">SecretaríaOS</p>
