@@ -8,17 +8,24 @@
  *  3. Guarda los tokens en Supabase (tabla gmail_tokens)
  *  4. Redirige a /configuracion con estado de éxito/error
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { intercambiarCodigo, guardarTokens } from '../lib/gmail'
 import { useAuth } from '../hooks/useAuth'
 
 export default function OAuthCallback({ onNavegar }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [estado, setEstado] = useState('procesando')  // procesando | ok | error
   const [mensaje, setMensaje] = useState('')
+  const ejecutado = useRef(false)  // evitar doble ejecución (StrictMode / doble render)
 
   useEffect(() => {
+    // Esperar a que useAuth resuelva la sesión
+    if (loading) return
+    // Ejecutar una sola vez
+    if (ejecutado.current) return
+    ejecutado.current = true
+
     async function procesarCallback() {
       const params = new URLSearchParams(window.location.search)
       const code  = params.get('code')
@@ -52,7 +59,6 @@ export default function OAuthCallback({ onNavegar }) {
 
         // Redirigir a Configuración tras 2 s
         setTimeout(() => {
-          // Limpiar el código de la URL antes de navegar
           window.history.replaceState({}, '', '/')
           onNavegar?.('configuracion')
         }, 2000)
@@ -64,7 +70,7 @@ export default function OAuthCallback({ onNavegar }) {
     }
 
     procesarCallback()
-  }, [user])
+  }, [loading, user])
 
   return (
     <div className="min-h-screen bg-surface-2 flex items-center justify-center p-4">
