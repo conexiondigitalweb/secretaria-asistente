@@ -10,6 +10,7 @@ import Tareas from './pages/Tareas'
 import Agenda from './pages/Agenda'
 import Documentos from './pages/Documentos'
 import Configuracion from './pages/Configuracion'
+import OAuthCallback from './pages/OAuthCallback'
 import { cn } from './lib/cn'
 
 const PAGES = [
@@ -39,6 +40,11 @@ const PAGE_MAP = {
 export default function App() {
   const { user, loading, signOut } = useAuth()
   const [page, setPage] = useState('dashboard')
+
+  // ── Ruta especial: /oauth/callback (Google OAuth redirect) ──
+  if (window.location.pathname === '/oauth/callback') {
+    return <OAuthCallback onNavegar={(p) => { window.history.replaceState({}, '', '/'); setPage(p) }} />
+  }
 
   if (loading) {
     return (
