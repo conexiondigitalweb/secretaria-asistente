@@ -42,7 +42,7 @@ export default function Dashboard() {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
   const manana = new Date(hoy)
-  manana.setDate(manana.getDate() + 2)
+  manana.setDate(manana.getDate() + 1)
   const proximosEventos = [...eventos]
     .filter(e => { const f = new Date(e.fecha_inicio); return f >= hoy && f < manana })
     .sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))
