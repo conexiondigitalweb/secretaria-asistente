@@ -18,6 +18,28 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+// Llama directamente a Google OAuth — las funciones serverless no pueden
+// hacer fetch a URLs relativas (/api/...) entre sí en contexto serverless.
+async function refreshAccessToken(refreshToken) {
+  const clientId     = process.env.GMAIL_CLIENT_ID
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET
+  if (!clientId || !clientSecret) throw new Error('GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET no configurados')
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id:     clientId,
+      client_secret: clientSecret,
+      grant_type:    'refresh_token',
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error_description ?? data.error ?? 'Error renovando token Gmail')
+  return data   // { access_token, expires_in, scope, token_type }
+}
+
 // Leídas dentro del handler (no a nivel de módulo) para garantizar
 // que vercel dev las tome aunque el módulo se haya cargado antes del restart.
 
@@ -240,18 +262,16 @@ export default async function handler(req, res) {
     let accessToken = tokenRow.access_token
     const expira    = new Date(tokenRow.expires_at).getTime()
     if (expira < Date.now() + 60_000 && tokenRow.refresh_token) {
-      const refreshRes = await fetch('/api/gmail-refresh-token', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ refresh_token: tokenRow.refresh_token }),
-      })
-      if (refreshRes.ok) {
-        const refreshed = await refreshRes.json()
+      try {
+        const refreshed = await refreshAccessToken(tokenRow.refresh_token)
         accessToken = refreshed.access_token
         await supabase.from('gmail_tokens').update({
           access_token: refreshed.access_token,
           expires_at:   new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
         }).eq('usuario_email', usuario_email)
+      } catch (refreshErr) {
+        console.warn('[gmail-sync] No se pudo refrescar el token:', refreshErr.message)
+        // Continuar con el token actual — puede que aún funcione
       }
     }
 
