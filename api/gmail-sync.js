@@ -18,9 +18,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL      = process.env.SUPABASE_URL        // sin prefijo VITE_ — accesible en api/
-const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
+// Leídas dentro del handler (no a nivel de módulo) para garantizar
+// que vercel dev las tome aunque el módulo se haya cargado antes del restart.
 
 // Días límite por tipo (lógica Colombia — igual que en utils.js)
 const DIAS_LIMITE = { tutela: 10, peticion: 15, queja: 15, solicitud: 15 }
@@ -182,8 +181,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  // Leer vars aquí — dentro del handler — para evitar que queden undefined
+  // si el módulo se cargó antes de que vercel dev inyectara el .env.local
+  const SUPABASE_URL      = process.env.SUPABASE_URL
+  const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
+
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'Variables de entorno del servidor no configuradas' })
+    return res.status(500).json({
+      error: 'Variables de entorno del servidor no configuradas',
+      debug: {
+        hasSupabaseUrl:  !!SUPABASE_URL,
+        hasServiceRole:  !!SERVICE_ROLE_KEY,
+        hasAnthropicKey: !!ANTHROPIC_API_KEY,
+      },
+    })
   }
 
   // JWT del usuario en el header Authorization
