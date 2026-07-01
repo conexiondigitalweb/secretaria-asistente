@@ -1,11 +1,12 @@
 import {
-  ClipboardList, AlertTriangle, Clock, XCircle,
+  ClipboardList, AlertTriangle, Clock, XCircle, RefreshCw,
 } from 'lucide-react'
 import StatCard from '../components/dashboard/StatCard'
 import TareaUrgente from '../components/dashboard/TareaUrgente'
 import EventoHoy from '../components/dashboard/EventoHoy'
 import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
+import { useGmailSync } from '../hooks/useGmailSync'
 import { diasHabilesRestantes, esHoy } from '../lib/utils'
 
 function saludo() {
@@ -22,8 +23,10 @@ function fechaLarga() {
 }
 
 export default function Dashboard() {
-  const { tareas, loading: loadingTareas, error: errorTareas } = useTareas()
+  const { tareas, loading: loadingTareas, error: errorTareas, refetch: refetchTareas } = useTareas()
   const { eventos, loading: loadingEventos } = useAgenda()
+  const { sincronizando, ultimaSync, resultado, gmailConectado, sincronizarAhora } =
+    useGmailSync({ habilitado: true })
 
   const activas    = tareas.filter(t => t.estado !== 'resuelto')
   const pendientes = activas.length
@@ -79,6 +82,32 @@ export default function Dashboard() {
 
         {/* Línea separadora sutil */}
         <div className="mt-4 h-px bg-border" />
+
+        {/* Indicador sync Gmail */}
+        {gmailConectado && (
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={async () => { await sincronizarAhora(); refetchTareas() }}
+              disabled={sincronizando}
+              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary
+                         transition-colors disabled:opacity-50"
+              title="Sincronizar Gmail ahora"
+            >
+              <RefreshCw className={`h-3 w-3 ${sincronizando ? 'animate-spin text-primary' : ''}`} />
+              {sincronizando ? 'Sincronizando Gmail…' : 'Gmail conectado'}
+            </button>
+            {ultimaSync && (
+              <span className="text-xs text-text-muted">
+                · Última sync {ultimaSync.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {resultado?.creados?.tareas > 0 && (
+              <span className="text-xs font-medium text-primary bg-primary-light px-2 py-0.5 rounded-full">
+                +{resultado.creados.tareas} tarea{resultado.creados.tareas !== 1 ? 's' : ''} nuevas
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── KPIs ──────────────────────────────────────────────────────── */}

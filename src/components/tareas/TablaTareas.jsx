@@ -63,9 +63,17 @@ export default function TablaTareas({ tareas, onSelect }) {
                 <Badge value={t.tipo} />
               </td>
               <td className="px-4 py-3.5 max-w-xs">
-                <p className="font-medium text-text-primary truncate group-hover:text-primary transition-colors">
-                  {t.asunto}
-                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="font-medium text-text-primary truncate group-hover:text-primary transition-colors">
+                    {t.asunto}
+                  </p>
+                  {t.origen === 'correo' && (
+                    <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full
+                                     bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+                      📧 Desde correo
+                    </span>
+                  )}
+                </div>
                 {t.radicado && (
                   <p className="text-[11px] font-mono text-text-muted truncate mt-0.5">{t.radicado}</p>
                 )}

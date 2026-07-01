@@ -48,7 +48,15 @@ export default function TareaUrgente({ tarea }) {
           </span>
           <span className="text-xs text-slate-400">{tarea.remitente}</span>
         </div>
-        <p className="text-sm text-slate-800 font-medium truncate">{tarea.asunto}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm text-slate-800 font-medium truncate">{tarea.asunto}</p>
+          {tarea.origen === 'correo' && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full
+                             bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+              📧
+            </span>
+          )}
+        </div>
         <p className="text-xs text-slate-400 mt-0.5">Recibido {formatFecha(tarea.fecha_recibido)}</p>
       </div>
       <span className={`text-xs shrink-0 mt-1 ${diasColor}`}>{diasLabel}</span>
