@@ -18,7 +18,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL      = process.env.VITE_SUPABASE_URL
+const SUPABASE_URL      = process.env.SUPABASE_URL        // sin prefijo VITE_ — accesible en api/
 const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 
