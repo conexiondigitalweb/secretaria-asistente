@@ -1,29 +1,34 @@
 /**
  * Vercel Serverless Function — /api/gmail-sync
  *
- * Lee correos nuevos desde la última sincronización, llama a Claude para
- * clasificar cada uno y crea tareas o eventos en Supabase.
+ * Lee correos nuevos desde la última sincronización, los clasifica con Claude
+ * y los guarda como BORRADORES PENDIENTES en borradores_correo.
  *
- * Autenticación: el cliente envía su JWT de Supabase en Authorization header.
- * El servidor lo usa para operar con RLS del usuario (sin service role key).
+ * Nunca crea tareas ni eventos directamente — todo requiere aprobación explícita
+ * del secretario desde el Dashboard.
  *
- * Variables de entorno requeridas:
- *   VITE_SUPABASE_URL      (reutilizamos la pública — solo la URL)
+ * Variables de entorno requeridas (todas en entorno Development de Vercel):
+ *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
  *   ANTHROPIC_API_KEY
+ *   GMAIL_CLIENT_ID
+ *   GMAIL_CLIENT_SECRET
  *
  * Body:  { usuario_email: string }
- * Resp:  { procesados: number, creados: { tareas: number, eventos: number }, historyId: string }
+ * Resp:  { procesados: number, borradoresPendientes: number, historyId: string }
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { clasificarCorreo } from './clasificar-correo.js'
 
-// Llama directamente a Google OAuth — las funciones serverless no pueden
-// hacer fetch a URLs relativas (/api/...) entre sí en contexto serverless.
+// ── Token refresh (llama directamente a Google — no fetch a /api/*) ──────────
+
 async function refreshAccessToken(refreshToken) {
   const clientId     = process.env.GMAIL_CLIENT_ID
   const clientSecret = process.env.GMAIL_CLIENT_SECRET
-  if (!clientId || !clientSecret) throw new Error('GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET no configurados')
+  if (!clientId || !clientSecret) {
+    throw new Error('GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET no configurados')
+  }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method:  'POST',
@@ -36,62 +41,35 @@ async function refreshAccessToken(refreshToken) {
     }),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error_description ?? data.error ?? 'Error renovando token Gmail')
-  return data   // { access_token, expires_in, scope, token_type }
-}
-
-// Leídas dentro del handler (no a nivel de módulo) para garantizar
-// que vercel dev las tome aunque el módulo se haya cargado antes del restart.
-
-// Días límite por tipo (lógica Colombia — igual que en utils.js)
-const DIAS_LIMITE = { tutela: 10, peticion: 15, queja: 15, solicitud: 15 }
-
-function sumarDiasHabiles(fecha, dias) {
-  const d = new Date(fecha)
-  let sumados = 0
-  while (sumados < dias) {
-    d.setDate(d.getDate() + 1)
-    const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) sumados++
+  if (!res.ok) {
+    throw new Error(data.error_description ?? data.error ?? 'Error renovando token Gmail')
   }
-  return d
+  return data  // { access_token, expires_in, scope, token_type }
 }
 
-function calcularFechaLimite(tipo, fechaRecibido) {
-  const dias = DIAS_LIMITE[tipo]
-  if (!dias) return null
-  return sumarDiasHabiles(new Date(fechaRecibido), dias).toISOString()
-}
-
-function prioridadPorTipo(tipo) {
-  if (tipo === 'tutela')  return 'critica'
-  if (tipo === 'peticion' || tipo === 'queja') return 'alta'
-  return 'media'
-}
-
-// ── Gmail API helpers ────────────────────────────────────────
+// ── Gmail API helpers ─────────────────────────────────────────────────────────
 
 async function gmailFetch(path, accessToken) {
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!res.ok) {
-    const err = await res.json()
+    const err = await res.json().catch(() => ({}))
     throw new Error(`Gmail API ${path}: ${err.error?.message ?? res.status}`)
   }
   return res.json()
 }
 
+// Labels de Gmail que indican basura — no gastar tokens de Claude en ellos
+const LABELS_IGNORAR = new Set(['SPAM', 'TRASH'])
+
 async function getMensajeDetalle(messageId, accessToken) {
-  const msg = await gmailFetch(
-    `/messages/${messageId}?format=full`,
-    accessToken
-  )
+  const msg = await gmailFetch(`/messages/${messageId}?format=full`, accessToken)
 
   const headers = msg.payload?.headers ?? []
-  const get = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+  const get = (name) =>
+    headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
 
-  // Extraer body (plain text preferido sobre html)
   function extractBody(payload) {
     if (!payload) return ''
     if (payload.mimeType === 'text/plain' && payload.body?.data) {
@@ -99,12 +77,16 @@ async function getMensajeDetalle(messageId, accessToken) {
     }
     if (payload.parts) {
       const plain = payload.parts.find(p => p.mimeType === 'text/plain')
-      if (plain?.body?.data) return Buffer.from(plain.body.data, 'base64').toString('utf-8')
+      if (plain?.body?.data) {
+        return Buffer.from(plain.body.data, 'base64').toString('utf-8')
+      }
       const html = payload.parts.find(p => p.mimeType === 'text/html')
       if (html?.body?.data) {
-        // Strip HTML tags for basic text
-        return Buffer.from(html.body.data, 'base64').toString('utf-8')
-          .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        return Buffer.from(html.body.data, 'base64')
+          .toString('utf-8')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
       }
     }
     return msg.snippet ?? ''
@@ -113,98 +95,40 @@ async function getMensajeDetalle(messageId, accessToken) {
   return {
     id:        msg.id,
     threadId:  msg.threadId,
+    labelIds:  msg.labelIds ?? [],   // ← necesario para filtrar SPAM/TRASH
     asunto:    get('Subject') || '(sin asunto)',
     remitente: get('From'),
     fecha:     get('Date'),
     cuerpo:    extractBody(msg.payload).slice(0, 6000),
     snippet:   msg.snippet ?? '',
-    leido:     !(msg.labelIds ?? []).includes('UNREAD'),
   }
 }
 
-// ── Claude clasificación ─────────────────────────────────────
+// ── Deduplicación por radicado ────────────────────────────────────────────────
 
-const SYSTEM_CLASIFICADOR = `Eres el asistente de clasificación de correos de la Secretaría de Educación, Cultura y Turismo del Municipio de Ocaña, Norte de Santander, Colombia.
-
-Tu tarea es clasificar correos electrónicos entrantes y extraer información estructurada.
-
-Responde ÚNICAMENTE con un objeto JSON válido, sin markdown, sin explicaciones, sin bloques de código.`
-
-async function clasificarConClaude(correo) {
-  const prompt = `Clasifica este correo y extrae la información solicitada.
-
-ASUNTO: ${correo.asunto}
-REMITENTE: ${correo.remitente}
-FECHA: ${correo.fecha}
-CUERPO:
-${correo.cuerpo}
-
-Responde con este JSON exacto (todos los campos son requeridos):
-{
-  "tipo": "tutela" | "peticion" | "queja" | "solicitud" | "convocatoria" | "informativo" | "otro",
-  "asunto_resumido": "máx 120 caracteres, claro y descriptivo",
-  "descripcion": "resumen de 2-3 oraciones del contenido",
-  "accion": "crear_tarea" | "crear_evento" | "ignorar",
-  "radicado": "número de radicado si aparece en el correo, o null",
-  "fecha_evento": "ISO 8601 si es convocatoria con fecha explícita, o null",
-  "hora_evento": "HH:MM si se menciona hora, o null",
-  "lugar_evento": "lugar si se menciona, o null",
-  "prioridad_sugerida": "critica" | "alta" | "media" | "baja"
+/**
+ * Verifica si ya existe una tutela con ese número de radicado en tareas.
+ * Usa el cliente service_role — necesita GRANT SELECT en tareas (migración 012).
+ */
+async function verificarRadicado(radicado, supabase) {
+  if (!radicado) return false
+  const { data } = await supabase
+    .from('tareas')
+    .select('id')
+    .eq('tipo', 'tutela')
+    .eq('radicado', radicado)
+    .maybeSingle()
+  return !!data
 }
 
-Reglas:
-- "tutela": menciona acción de tutela, derechos fundamentales, juzgado, demandante
-- "peticion": derecho de petición, solicitud formal de ciudadano o entidad
-- "queja": queja, reclamo, inconformidad
-- "solicitud": solicitud interna, requerimiento institucional
-- "convocatoria": reunión, evento, citación con fecha → accion="crear_evento"
-- "informativo": boletines, newsletters, notificaciones automáticas → accion="ignorar"
-- "otro": no encaja en las anteriores
-- Tutelas y peticiones siempre accion="crear_tarea"
-- Si no hay fecha explícita para evento, usa accion="crear_tarea"`
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key':         ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-5',
-      max_tokens: 512,
-      system:     SYSTEM_CLASIFICADOR,
-      messages:   [{ role: 'user', content: prompt }],
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(`Claude: ${err.error?.message ?? res.status}`)
-  }
-
-  const data = await res.json()
-  const texto = data.content?.[0]?.text ?? '{}'
-
-  try {
-    return JSON.parse(texto)
-  } catch {
-    // Intentar extraer JSON si Claude agregó algo extra
-    const match = texto.match(/\{[\s\S]*\}/)
-    if (match) return JSON.parse(match[0])
-    throw new Error(`Claude devolvió JSON inválido: ${texto.slice(0, 200)}`)
-  }
-}
-
-// ── Handler principal ────────────────────────────────────────
+// ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Leer vars aquí — dentro del handler — para evitar que queden undefined
-  // si el módulo se cargó antes de que vercel dev inyectara el .env.local
+  // Leer vars dentro del handler — evita undefined si el módulo se cargó antes del env
   const SUPABASE_URL      = process.env.SUPABASE_URL
   const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
@@ -220,7 +144,7 @@ export default async function handler(req, res) {
     })
   }
 
-  // JWT del usuario en el header Authorization
+  // JWT del usuario para verificar identidad
   const authHeader = req.headers.authorization ?? ''
   const userJwt    = authHeader.replace('Bearer ', '').trim()
   if (!userJwt) {
@@ -232,7 +156,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Campo usuario_email requerido' })
   }
 
-  // Cliente Supabase con service role (para escritura cross-RLS)
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   })
@@ -247,7 +170,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1 — Obtener access token de Gmail (con lógica de refresh si es necesario)
+    // 1 — Obtener access token de Gmail (refrescar si expiró)
     const { data: tokenRow } = await supabase
       .from('gmail_tokens')
       .select('access_token, refresh_token, expires_at')
@@ -258,7 +181,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Gmail no conectado para este usuario' })
     }
 
-    // Refrescar si el token expiró (con 60s de margen)
     let accessToken = tokenRow.access_token
     const expira    = new Date(tokenRow.expires_at).getTime()
     if (expira < Date.now() + 60_000 && tokenRow.refresh_token) {
@@ -271,7 +193,7 @@ export default async function handler(req, res) {
         }).eq('usuario_email', usuario_email)
       } catch (refreshErr) {
         console.warn('[gmail-sync] No se pudo refrescar el token:', refreshErr.message)
-        // Continuar con el token actual — puede que aún funcione
+        // Continúa con el token actual — puede que aún sirva
       }
     }
 
@@ -286,16 +208,16 @@ export default async function handler(req, res) {
     let nuevoHistoryId       = null
 
     if (syncRow?.history_id) {
-      // Sync incremental: solo mensajes nuevos desde el último historyId
+      // Sync incremental — todos los mensajes nuevos (sin filtro labelId para incluir todas las pestañas)
+      // SPAM y TRASH se filtran DESPUÉS de obtener detalles, antes de clasificar con Claude
       const histData = await gmailFetch(
-        `/history?startHistoryId=${syncRow.history_id}&historyTypes=messageAdded&labelId=INBOX`,
+        `/history?startHistoryId=${syncRow.history_id}&historyTypes=messageAdded`,
         accessToken
       )
       nuevoHistoryId = histData.historyId ?? syncRow.history_id
 
-      const historyRecords = histData.history ?? []
       const idsVistos = new Set()
-      for (const record of historyRecords) {
+      for (const record of histData.history ?? []) {
         for (const added of record.messagesAdded ?? []) {
           const id = added.message?.id
           if (id && !idsVistos.has(id)) {
@@ -305,103 +227,109 @@ export default async function handler(req, res) {
         }
       }
     } else {
-      // Primera sync: últimos 20 correos de la bandeja de entrada
+      // Primera sync — últimos 50 correos (sin filtro de pestaña para incluir todas)
+      // SPAM y TRASH se filtran después al obtener detalles del mensaje
       const listData = await gmailFetch(
-        '/messages?maxResults=20&labelIds=INBOX',
+        '/messages?maxResults=50',
         accessToken
       )
       nuevoHistoryId = listData.historyId ?? null
       mensajesParaProcesar = (listData.messages ?? []).map(m => m.id)
     }
 
-    // 3 — Filtrar IDs ya procesados (por correo_id en tareas)
+    // 3 — Filtrar IDs que ya tienen borrador creado
     if (mensajesParaProcesar.length > 0) {
       const { data: yaExisten } = await supabase
-        .from('tareas')
-        .select('correo_id')
-        .in('correo_id', mensajesParaProcesar)
-      const procesados = new Set((yaExisten ?? []).map(t => t.correo_id))
+        .from('borradores_correo')
+        .select('gmail_message_id')
+        .in('gmail_message_id', mensajesParaProcesar)
+      const procesados = new Set((yaExisten ?? []).map(b => b.gmail_message_id))
       mensajesParaProcesar = mensajesParaProcesar.filter(id => !procesados.has(id))
     }
 
-    // 4 — Procesar cada mensaje
-    let tareasCreadas = 0
-    let eventosCreados = 0
+    // 4 — Clasificar y guardar cada mensaje como borrador
+    let borradoresCreados = 0
 
     for (const messageId of mensajesParaProcesar) {
       try {
-        const correo      = await getMensajeDetalle(messageId, accessToken)
-        const clasificacion = await clasificarConClaude(correo)
+        const correo = await getMensajeDetalle(messageId, accessToken)
 
-        if (clasificacion.accion === 'ignorar') continue
-
-        const fechaRecibido = new Date(correo.fecha).toISOString()
-
-        if (clasificacion.accion === 'crear_evento' && clasificacion.fecha_evento) {
-          // Crear evento en agenda
-          let fechaInicio = clasificacion.fecha_evento
-          if (clasificacion.hora_evento) {
-            const [h, m] = clasificacion.hora_evento.split(':')
-            const d = new Date(fechaInicio)
-            d.setHours(parseInt(h), parseInt(m), 0, 0)
-            fechaInicio = d.toISOString()
-          }
-
-          await supabase.from('eventos_agenda').insert([{
-            titulo:      clasificacion.asunto_resumido,
-            descripcion: `${clasificacion.descripcion}\n\nFuente: correo de ${correo.remitente}`,
-            fecha_inicio: fechaInicio,
-            fecha_fin:   null,
-            tipo:        'evento',
-            lugar:       clasificacion.lugar_evento ?? null,
-            created_by:  user.id,
-          }])
-          eventosCreados++
-
-        } else {
-          // Crear tarea
-          const tipo         = ['tutela','peticion','queja','solicitud','otro'].includes(clasificacion.tipo)
-            ? clasificacion.tipo : 'otro'
-          const fechaLimite  = calcularFechaLimite(tipo, fechaRecibido)
-          const prioridad    = clasificacion.prioridad_sugerida
-            && ['critica','alta','media','baja'].includes(clasificacion.prioridad_sugerida)
-              ? clasificacion.prioridad_sugerida
-              : prioridadPorTipo(tipo)
-
-          await supabase.from('tareas').insert([{
-            tipo,
-            origen:         'correo',
-            asunto:         clasificacion.asunto_resumido,
-            descripcion:    clasificacion.descripcion,
-            remitente:      correo.remitente,
-            fecha_recibido: fechaRecibido,
-            fecha_limite:   fechaLimite,
-            estado:         'pendiente',
-            prioridad,
-            correo_id:      messageId,
-            radicado:       clasificacion.radicado ?? null,
-          }])
-          tareasCreadas++
+        // Ignorar SPAM y TRASH — Gmail ya los identificó, no gastar tokens de Claude
+        if (correo.labelIds.some(l => LABELS_IGNORAR.has(l))) {
+          console.log(`[gmail-sync] Ignorando mensaje ${messageId} (SPAM/TRASH)`)
+          continue
         }
 
+        // Clasificar con Claude
+        const clasificacion = await clasificarCorreo({
+          asunto:    correo.asunto,
+          cuerpo:    correo.cuerpo,
+          remitente: correo.remitente,
+        }, ANTHROPIC_API_KEY)
+
+        // Armar datos_extraidos
+        const datosExtraidos = {
+          numero_radicado:    clasificacion.numero_radicado  ?? null,
+          fecha_limite:       clasificacion.fecha_limite      ?? null,
+          lugar:              clasificacion.lugar              ?? null,
+          fecha_hora_reunion: clasificacion.fecha_hora_reunion ?? null,
+          es_duplicado:       false,
+        }
+
+        // Verificar duplicado por radicado (solo tutelas y peticiones)
+        if (
+          clasificacion.numero_radicado &&
+          (clasificacion.clasificacion === 'tutela' || clasificacion.clasificacion === 'peticion')
+        ) {
+          const esDuplicado = await verificarRadicado(clasificacion.numero_radicado, supabase)
+          if (esDuplicado) {
+            datosExtraidos.es_duplicado = true
+            console.log(
+              `[gmail-sync] Radicado duplicado ${clasificacion.numero_radicado} — se guarda borrador marcado`
+            )
+          }
+        }
+
+        // Insertar borrador — estado siempre 'pendiente', nunca crea tarea/evento directamente
+        await supabase.from('borradores_correo').insert({
+          gmail_message_id: messageId,
+          usuario_email,
+          remitente:        correo.remitente,
+          asunto:           correo.asunto,
+          cuerpo_resumen:   clasificacion.resumen,
+          clasificacion:    clasificacion.clasificacion,
+          confianza:        clasificacion.confianza,
+          datos_extraidos:  datosExtraidos,
+          estado:           'pendiente',
+        })
+
+        borradoresCreados++
       } catch (msgErr) {
-        // Log pero continuar con el siguiente mensaje
         console.error(`[gmail-sync] Error procesando mensaje ${messageId}:`, msgErr.message)
+        // Continúa con el siguiente — no romper el flujo por un correo
       }
     }
 
-    // 5 — Actualizar estado de sync
+    // 5 — Contar borradores pendientes totales del usuario
+    const { count: borradoresPendientes } = await supabase
+      .from('borradores_correo')
+      .select('*', { count: 'exact', head: true })
+      .eq('usuario_email', usuario_email)
+      .eq('estado', 'pendiente')
+
+    // 6 — Actualizar estado de sync
     await supabase.from('gmail_sync').upsert({
-      usuario_email:      usuario_email,
-      history_id:         nuevoHistoryId,
-      last_sync_at:       new Date().toISOString(),
-      emails_procesados:  (syncRow?.emails_procesados ?? 0) + mensajesParaProcesar.length,
+      usuario_email,
+      history_id:        nuevoHistoryId,
+      last_sync_at:      new Date().toISOString(),
+      emails_procesados: (syncRow?.emails_procesados ?? 0) + mensajesParaProcesar.length,
     }, { onConflict: 'usuario_email' })
 
     return res.status(200).json({
-      procesados:  mensajesParaProcesar.length,
-      creados:     { tareas: tareasCreadas, eventos: eventosCreados },
-      historyId:   nuevoHistoryId,
+      procesados:          mensajesParaProcesar.length,
+      borradoresCreados,
+      borradoresPendientes: borradoresPendientes ?? 0,
+      historyId:           nuevoHistoryId,
     })
 
   } catch (err) {

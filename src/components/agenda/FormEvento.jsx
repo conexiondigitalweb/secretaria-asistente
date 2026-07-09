@@ -45,9 +45,10 @@ const EMPTY = {
  *   onSubmit: (data: object) => void,
  *   onCancel: () => void,
  *   loading?: boolean,
+ *   fechaVacia?: boolean  — Si true y inicial no trae fecha_inicio, el campo queda vacío (obligatorio)
  * }} props
  */
-export default function FormEvento({ inicial, onSubmit, onCancel, loading = false }) {
+export default function FormEvento({ inicial, onSubmit, onCancel, loading = false, fechaVacia = false }) {
   const { funcionarios } = useFuncionarios({ soloActivos: true })
   const [form, setForm]  = useState(EMPTY)
 
@@ -57,7 +58,9 @@ export default function FormEvento({ inicial, onSubmit, onCancel, loading = fals
         titulo:       inicial.titulo ?? '',
         descripcion:  inicial.descripcion ?? '',
         tipo:         inicial.tipo ?? 'reunion',
-        fecha_inicio: inicial.fecha_inicio ? toLocalDT(new Date(inicial.fecha_inicio)) : ahora(),
+        fecha_inicio: inicial.fecha_inicio
+          ? toLocalDT(new Date(inicial.fecha_inicio))
+          : fechaVacia ? '' : ahora(),
         fecha_fin:    inicial.fecha_fin    ? toLocalDT(new Date(inicial.fecha_fin))    : '',
         lugar:        inicial.lugar ?? '',
         delegado_id:  inicial.delegado_id ?? '',
@@ -65,7 +68,7 @@ export default function FormEvento({ inicial, onSubmit, onCancel, loading = fals
     } else {
       setForm(EMPTY)
     }
-  }, [inicial])
+  }, [inicial, fechaVacia])
 
   const set = (k, v) => setForm(p => ({
     ...p, [k]: v,

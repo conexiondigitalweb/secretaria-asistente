@@ -1,12 +1,19 @@
+import { useState } from 'react'
 import {
   ClipboardList, AlertTriangle, Clock, XCircle, RefreshCw,
 } from 'lucide-react'
 import StatCard from '../components/dashboard/StatCard'
 import TareaUrgente from '../components/dashboard/TareaUrgente'
 import EventoHoy from '../components/dashboard/EventoHoy'
+import BorradoresPendientes from '../components/dashboard/BorradoresPendientes'
+import Modal from '../components/ui/Modal'
+import FormEvento from '../components/agenda/FormEvento'
 import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
+import { useAuth } from '../hooks/useAuth'
+import { sincronizarConCalendar } from '../lib/calendarSync'
 import { useGmailSync } from '../hooks/useGmailSync'
+import { useBorradores } from '../hooks/useBorradores'
 import { diasHabilesRestantes, esHoy } from '../lib/utils'
 
 function saludo() {
@@ -23,10 +30,21 @@ function fechaLarga() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const { tareas, loading: loadingTareas, error: errorTareas, refetch: refetchTareas } = useTareas()
-  const { eventos, loading: loadingEventos } = useAgenda()
+  const { eventos, loading: loadingEventos, refetch: refetchEventos, actualizarEvento } = useAgenda()
   const { sincronizando, ultimaSync, resultado, gmailConectado, sincronizarAhora } =
     useGmailSync({ habilitado: true })
+  const {
+    borradores, loading: loadingBorradores, procesando,
+    aprobar, aprobarConEvento, rechazar, fetchBorradores,
+  } = useBorradores()
+
+  // Modal de FormEvento para convocatorias sin fecha extraída
+  // { borrador, datosPrellenos }
+  const [modalEvento, setModalEvento]       = useState(null)
+  const [guardandoEvento, setGuardandoEvento] = useState(false)
+  const [errorEvento, setErrorEvento]       = useState(null)
 
   const activas    = tareas.filter(t => t.estado !== 'resuelto')
   const pendientes = activas.length
@@ -87,7 +105,7 @@ export default function Dashboard() {
         {gmailConectado && (
           <div className="mt-3 flex items-center gap-2">
             <button
-              onClick={async () => { await sincronizarAhora(); refetchTareas() }}
+              onClick={async () => { await sincronizarAhora(); refetchTareas(); fetchBorradores() }}
               disabled={sincronizando}
               className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary
                          transition-colors disabled:opacity-50"
@@ -101,14 +119,45 @@ export default function Dashboard() {
                 · Última sync {ultimaSync.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            {resultado?.creados?.tareas > 0 && (
-              <span className="text-xs font-medium text-primary bg-primary-light px-2 py-0.5 rounded-full">
-                +{resultado.creados.tareas} tarea{resultado.creados.tareas !== 1 ? 's' : ''} nuevas
+            {resultado?.borradoresCreados > 0 && (
+              <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                +{resultado.borradoresCreados} borrador{resultado.borradoresCreados !== 1 ? 'es' : ''} para revisar
               </span>
             )}
           </div>
         )}
       </div>
+
+      {/* ── Borradores pendientes de aprobación ───────────────────────── */}
+      <BorradoresPendientes
+        borradores={borradores}
+        loading={loadingBorradores}
+        procesando={procesando}
+        onAprobar={async (b, claseOverride) => {
+          const res = await aprobar(b, claseOverride)
+          if (res.ok) {
+            refetchTareas()
+            if (res.tipo === 'evento') {
+              refetchEventos()
+              // Sincronizar evento creado con Google Calendar (best-effort)
+              if (user?.email) {
+                const datos = b.datos_extraidos ?? {}
+                sincronizarConCalendar(res.id, {
+                  titulo:       b.asunto,
+                  descripcion:  b.cuerpo_resumen,
+                  fecha_inicio: datos.fecha_hora_reunion,
+                  lugar:        datos.lugar,
+                }, user.email).catch(e => console.warn('[Dashboard] calSync:', e.message))
+              }
+            }
+          } else if (res.needsFormEvento) {
+            // Convocatoria sin fecha → abrir FormEvento con datos precargados
+            setErrorEvento(null)
+            setModalEvento({ borrador: b, datosPrellenos: res.datosPrellenos })
+          }
+        }}
+        onRechazar={rechazar}
+      />
 
       {/* ── KPIs ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
@@ -194,6 +243,49 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* ── Modal FormEvento para convocatorias sin fecha ─────────────── */}
+      <Modal
+        open={!!modalEvento}
+        onClose={() => { setModalEvento(null); setErrorEvento(null) }}
+        title="Crear evento desde correo"
+      >
+        {modalEvento && (
+          <div className="space-y-3">
+            <p className="text-xs text-text-muted bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              El correo no incluía fecha. Completá los datos del evento para aprobarlo.
+            </p>
+            {errorEvento && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {errorEvento}
+              </p>
+            )}
+            <FormEvento
+              inicial={modalEvento.datosPrellenos}
+              fechaVacia
+              loading={guardandoEvento}
+              onCancel={() => { setModalEvento(null); setErrorEvento(null) }}
+              onSubmit={async (datosEvento) => {
+                setGuardandoEvento(true)
+                setErrorEvento(null)
+                const res = await aprobarConEvento(modalEvento.borrador, datosEvento)
+                setGuardandoEvento(false)
+                if (res.ok) {
+                  setModalEvento(null)
+                  refetchEventos()
+                  // Sincronizar con Calendar (best-effort)
+                  if (user?.email) {
+                    sincronizarConCalendar(res.id, datosEvento, user.email)
+                      .catch(e => console.warn('[Dashboard] calSync:', e.message))
+                  }
+                } else {
+                  setErrorEvento(res.error ?? 'Error al crear el evento')
+                }
+              }}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

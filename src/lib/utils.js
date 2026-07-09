@@ -136,6 +136,19 @@ export function diasHabilesRestantes(fechaLimite) {
   return signo * count
 }
 
+// ─── Prioridad por tipo de solicitud ─────────────────────────────────────────
+
+/**
+ * Prioridad predeterminada según el tipo de tarea.
+ * @param {string} tipo
+ * @returns {'critica'|'alta'|'media'|'baja'}
+ */
+export function prioridadPorTipo(tipo) {
+  if (tipo === 'tutela')                        return 'critica'
+  if (tipo === 'peticion' || tipo === 'queja')  return 'alta'
+  return 'media'
+}
+
 // ─── Helpers de presentación ──────────────────────────────────────────────────
 
 /**

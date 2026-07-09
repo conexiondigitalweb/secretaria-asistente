@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import TablaTareas from '../components/tareas/TablaTareas'
 import FormTarea from '../components/tareas/FormTarea'
+import FormEditarTarea from '../components/tareas/FormEditarTarea'
 import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
@@ -34,6 +35,8 @@ export default function Tareas() {
   const [notifDetalle, setNotifDetalle]     = useState({}) // { enviando, correoEnviado, error }
   const [funcEdit, setFuncEdit]             = useState(null)  // id seleccionado en el panel detalle
   const [guardandoFunc, setGuardandoFunc]   = useState(false)
+  const [modalEditar, setModalEditar]       = useState(false)
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
   const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
 
@@ -110,6 +113,21 @@ export default function Tareas() {
       setTareaSeleccionada(actualizada)
     } catch (e) {
       setErrorAccion('Error al actualizar: ' + e.message)
+    }
+  }
+
+  async function handleGuardarEdicion(cambios) {
+    if (!sel) return
+    setGuardandoEdicion(true)
+    setErrorAccion(null)
+    try {
+      const actualizada = await actualizarTarea(sel.id, cambios)
+      setTareaSeleccionada(actualizada)
+      setModalEditar(false)
+    } catch (e) {
+      setErrorAccion('Error al guardar: ' + e.message)
+    } finally {
+      setGuardandoEdicion(false)
     }
   }
 
@@ -240,6 +258,26 @@ export default function Tareas() {
                    loading={guardando} />
       </Modal>
 
+      {/* ── Modal editar tarea ────────────────────────────────────────── */}
+      <Modal
+        open={modalEditar && !!sel}
+        onClose={() => setModalEditar(false)}
+        title={sel ? `Editar — ${sel.asunto}` : 'Editar tarea'}
+        width="max-w-2xl"
+      >
+        {errorAccion && (
+          <div className="mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {errorAccion}
+          </div>
+        )}
+        <FormEditarTarea
+          tarea={sel}
+          onSubmit={handleGuardarEdicion}
+          onCancel={() => setModalEditar(false)}
+          loading={guardandoEdicion}
+        />
+      </Modal>
+
       {/* ── Panel detalle — full screen en móvil, lateral en desktop ──── */}
       {sel && (
         <>
@@ -256,12 +294,23 @@ export default function Tareas() {
             <div className="flex items-center justify-between px-5 py-4
                             border-b border-slate-200 shrink-0">
               <h2 className="text-sm font-semibold text-slate-800">Detalle de tarea</h2>
-              <button
-                onClick={() => setTareaSeleccionada(null)}
-                className="text-slate-400 hover:text-slate-600 text-2xl leading-none p-1"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setModalEditar(true); setErrorAccion(null) }}
+                  className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg
+                             border border-slate-200 text-slate-600
+                             hover:border-primary/40 hover:text-primary hover:bg-primary-light transition-colors"
+                  title="Editar todos los campos"
+                >
+                  ✏️ Editar
+                </button>
+                <button
+                  onClick={() => setTareaSeleccionada(null)}
+                  className="text-slate-400 hover:text-slate-600 text-2xl leading-none p-1"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4

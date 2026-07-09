@@ -13,7 +13,7 @@ export function useAgenda() {
     const { data, error } = await supabase
       .from('eventos_agenda')
       // Incluir datos del delegado en la misma query
-      .select('*, delegado:funcionarios(id, nombre, cargo)')
+      .select('*, delegado:funcionarios(id, nombre, cargo, correo, whatsapp)')
       .order('fecha_inicio', { ascending: true })
     if (error) setError(error)
     else setEventos(data ?? [])
@@ -24,7 +24,7 @@ export function useAgenda() {
     const { data, error } = await supabase
       .from('eventos_agenda')
       .insert([evento])
-      .select('*, delegado:funcionarios(id, nombre, cargo)')
+      .select('*, delegado:funcionarios(id, nombre, cargo, correo, whatsapp)')
       .single()
     if (error) throw error
     setEventos(prev => [...prev, data].sort((a, b) =>
@@ -37,7 +37,7 @@ export function useAgenda() {
       .from('eventos_agenda')
       .update(cambios)
       .eq('id', id)
-      .select('*, delegado:funcionarios(id, nombre, cargo)')
+      .select('*, delegado:funcionarios(id, nombre, cargo, correo, whatsapp)')
       .single()
     if (error) throw error
     setEventos(prev => prev.map(e => e.id === id ? data : e))

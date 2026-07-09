@@ -4,6 +4,7 @@ import {
   iniciarAuthGmail,
   desconectarGmail,
   listarCorreosRecientes,
+  SCOPES_REQUERIDOS,
 } from '../lib/gmail'
 
 export function useGmail(usuarioEmail) {
@@ -66,12 +67,18 @@ export function useGmail(usuarioEmail) {
     }
   }
 
+  // true si el token guardado no tiene todos los scopes requeridos
+  const scopesInsuficientes = estado?.conectado
+    ? SCOPES_REQUERIDOS.some(s => !estado.scope?.includes(s))
+    : false
+
   return {
     estado,
     loading,
     error,
     correos,
     cargandoCorreos,
+    scopesInsuficientes,
     conectar,
     desconectar,
     cargarCorreos,

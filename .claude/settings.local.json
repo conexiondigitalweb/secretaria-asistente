@@ -12,7 +12,27 @@
       "Bash(git push *)",
       "Bash(npm install *)",
       "Bash(powershell -Command ' *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npm list *)",
+      "Bash(vercel dev *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill -F -IM node.exe)",
+      "Bash(vercel env *)",
+      "Bash(exist \"C:\\\\Proyectos\\\\secretaria-asistente\\\\.vercel\\\\cache\" rmdir /S /Q \"C:\\\\Proyectos\\\\secretaria-asistente\\\\.vercel\\\\cache\")",
+      "Bash(netstat -ano)",
+      "Bash(kill -9 13812 7764)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 13812\")",
+      "Bash(cmd.exe /c \"taskkill /F /PID 7764\")",
+      "Bash(exit 0)",
+      "Bash(curl -s http://localhost:3000 -o nul -w \"%{http_code}\")",
+      "Bash(findstr \"LISTENING\")",
+      "Bash(findstr \":300\")",
+      "Bash(curl -s http://localhost:3003/api/google-calendar?usuario_email=test)",
+      "Bash(curl -s http://localhost:3000 -I)",
+      "Bash(curl -s http://localhost:3000/api/google-calendar -X POST -H \"Content-Type: application/json\" -d \"{\\\\\"test\\\\\":1}\")",
+      "Bash(curl -s http://localhost:3001/api/google-calendar -X POST -H \"Content-Type: application/json\" -d \"{\\\\\"test\\\\\":1}\")",
+      "Bash(npx vercel *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

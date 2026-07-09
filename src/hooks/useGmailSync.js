@@ -29,22 +29,38 @@ export function useGmailSync({ habilitado = true } = {}) {
   useEffect(() => {
     if (!user?.email) return
     estadoConexionGmail(user.email).then(e => {
+      console.log('[useGmailSync] estadoConexionGmail:', e)
       if (montado.current) setGmailConectado(e.conectado)
     })
   }, [user?.email])
 
   const sincronizarAhora = useCallback(async () => {
-    if (!user?.email || !gmailConectado || sincronizando) return
+    console.log('[useGmailSync] sincronizarAhora llamado', {
+      email: user?.email,
+      gmailConectado,
+      sincronizando,
+      montado: montado.current,
+    })
+
+    if (!user?.email || !gmailConectado || sincronizando) {
+      console.warn('[useGmailSync] Guard bloqueó la sync:', {
+        sinEmail: !user?.email,
+        sinConexion: !gmailConectado,
+        yaEnCurso: sincronizando,
+      })
+      return
+    }
 
     setSincronizando(true)
     setError(null)
 
     try {
-      // Obtener JWT del usuario para enviarlo al serverless
       const { data: { session } } = await supabase.auth.getSession()
       const jwt = session?.access_token
+      console.log('[useGmailSync] JWT obtenido:', jwt ? 'OK' : 'null')
       if (!jwt) throw new Error('No hay sesión activa')
 
+      console.log('[useGmailSync] Llamando a /api/gmail-sync…')
       const res = await fetch('/api/gmail-sync', {
         method:  'POST',
         headers: {
@@ -55,6 +71,8 @@ export function useGmailSync({ habilitado = true } = {}) {
       })
 
       const data = await res.json()
+      console.log('[useGmailSync] Respuesta /api/gmail-sync:', res.status, data)
+
       if (!res.ok) throw new Error(data.error ?? 'Error en sincronización')
 
       if (montado.current) {
@@ -62,6 +80,7 @@ export function useGmailSync({ habilitado = true } = {}) {
         setUltimaSync(new Date())
       }
     } catch (err) {
+      console.error('[useGmailSync] Error:', err.message)
       if (montado.current) setError(err.message)
     } finally {
       if (montado.current) setSincronizando(false)

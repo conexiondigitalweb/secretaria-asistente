@@ -7,7 +7,7 @@
  *  - Desconectar
  */
 import { useState } from 'react'
-import { Mail, CheckCircle2, XCircle, Loader2, RefreshCw, LogOut, Inbox } from 'lucide-react'
+import { Mail, CheckCircle2, XCircle, Loader2, RefreshCw, LogOut, Inbox, AlertTriangle } from 'lucide-react'
 import { useGmail } from '../../hooks/useGmail'
 import { cn } from '../../lib/cn'
 
@@ -23,8 +23,11 @@ function formatFechaCorreo(dateStr) {
 }
 
 export default function SeccionGmail({ usuarioEmail }) {
-  const { estado, loading, error, correos, cargandoCorreos, conectar, desconectar, cargarCorreos } =
-    useGmail(usuarioEmail)
+  const {
+    estado, loading, error, correos, cargandoCorreos,
+    scopesInsuficientes,
+    conectar, desconectar, cargarCorreos,
+  } = useGmail(usuarioEmail)
 
   const [confirmDesconectar, setConfirmDesconectar] = useState(false)
   const [mostrarCorreos, setMostrarCorreos]         = useState(false)
@@ -87,17 +90,48 @@ export default function SeccionGmail({ usuarioEmail }) {
         {!loading && !estado?.conectado && (
           <div className="space-y-3">
             <p className="text-xs text-text-secondary">
-              Conecta tu cuenta de Gmail institucional para que SecretaríaOS pueda leer
-              los correos entrantes y detectar peticiones, tutelas y solicitudes automáticamente.
-              Solo se solicita permiso de <strong>lectura</strong> — nunca se enviará nada sin tu aprobación.
+              Conecta tu cuenta institucional para que SecretaríaOS lea correos entrantes,
+              detecte peticiones, tutelas y solicitudes, y sincronice la Agenda con
+              Google Calendar. Los permisos solicitados son:
             </p>
+            <ul className="text-xs text-text-muted space-y-0.5 list-disc list-inside pl-1">
+              <li><strong>Gmail (modificar)</strong> — leer correos y marcar como leído al procesar</li>
+              <li><strong>Google Calendar</strong> — ver y crear eventos desde la Agenda</li>
+            </ul>
             <button
               onClick={conectar}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white
                          text-sm font-medium hover:bg-primary-hover transition-colors"
             >
               <Mail className="h-4 w-4" />
-              Conectar Gmail institucional
+              Conectar cuenta institucional
+            </button>
+          </div>
+        )}
+
+        {/* Aviso: scopes insuficientes (token antiguo sin Calendar/gmail.modify) */}
+        {!loading && estado?.conectado && scopesInsuficientes && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800">
+                  Se requieren permisos adicionales
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  El token actual solo tiene acceso de lectura a Gmail. Para usar
+                  Google Calendar y marcar correos como leídos al procesarlos,
+                  debes reconectar la cuenta con los nuevos permisos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={conectar}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-600 text-white
+                         text-xs font-medium hover:bg-amber-700 transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reconectar con permisos adicionales
             </button>
           </div>
         )}
@@ -116,8 +150,12 @@ export default function SeccionGmail({ usuarioEmail }) {
                 </span></p>
               )}
               {estado.scope && (
-                <p>Permisos: <span className="text-text-secondary font-medium">
-                  {estado.scope.includes('gmail.readonly') ? 'Lectura de correos' : estado.scope}
+                <p>Permisos activos: <span className="text-text-secondary font-medium">
+                  {[
+                    estado.scope.includes('gmail.modify')  && 'Gmail (modificar)',
+                    estado.scope.includes('gmail.readonly') && !estado.scope.includes('gmail.modify') && 'Gmail (solo lectura)',
+                    estado.scope.includes('calendar')       && 'Google Calendar',
+                  ].filter(Boolean).join(' · ') || estado.scope}
                 </span></p>
               )}
             </div>

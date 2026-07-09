@@ -12,7 +12,18 @@
 import { supabase } from './supabase'
 
 const CLIENT_ID = import.meta.env.VITE_GMAIL_CLIENT_ID
-const SCOPES    = 'https://www.googleapis.com/auth/gmail.readonly'
+
+// Scopes requeridos por la aplicación:
+//   gmail.modify  — lectura + cambio de labels (marcar leído, mover a spam)
+//   calendar      — acceso completo a Google Calendar (leer, crear, editar eventos)
+// NOTA: Cambiar estos scopes requiere reconexión OAuth (nuevo consentimiento del usuario).
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/calendar',
+].join(' ')
+
+// Scopes mínimos requeridos para verificación de suficiencia en la UI
+export const SCOPES_REQUERIDOS = ['gmail.modify', 'calendar']
 
 // ── Redirect URI ─────────────────────────────────────────────
 // Desarrollo:  http://localhost:5173/oauth/callback
