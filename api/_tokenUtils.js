@@ -113,3 +113,53 @@ export async function verificarJwt(userJwt, usuarioEmail, supabase) {
   if (user.email !== usuarioEmail) return null
   return user
 }
+
+/**
+ * Verifica el JWT de cualquier usuario autenticado y activo (sin importar
+ * su rol ni su email) — usado por endpoints donde el recurso accedido no
+ * pertenece al usuario que llama, sino a una cuenta fija (ej. el token
+ * OAuth institucional del admin).
+ *
+ * @param {string}        userJwt
+ * @param {SupabaseClient} supabase   — cliente con service_role
+ * @returns {{ user } | null}
+ */
+export async function verificarUsuarioActivo(userJwt, supabase) {
+  if (!userJwt) return null
+  const { data: { user }, error } = await supabase.auth.getUser(userJwt)
+  if (error || !user) return null
+
+  const { data: perfil } = await supabase
+    .from('user_profiles')
+    .select('active')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (!perfil?.active) return null
+  return user
+}
+
+/**
+ * Resuelve el email del usuario con role='admin' y active=true —
+ * la cuenta institucional cuyo token OAuth se usa para TODA la
+ * sincronización de Google Calendar, sin importar quién crea el evento.
+ *
+ * @param {SupabaseClient} supabase   — cliente con service_role
+ * @returns {string|null}
+ */
+export async function obtenerEmailAdmin(supabase) {
+  const { data: admin } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .eq('active', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (!admin) return null
+
+  const { data, error } = await supabase.auth.admin.getUserById(admin.id)
+  if (error || !data?.user) return null
+  return data.user.email
+}

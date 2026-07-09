@@ -5,6 +5,9 @@
  * Los eventos devueltos son normalizados al formato de eventos_agenda para
  * mostrarlos mezclados en Agenda.jsx.
  *
+ * SIEMPRE lee el calendario de la cuenta admin (resuelto server-side) —
+ * cualquier usuario autenticado y activo (admin o agenda) puede llamarlo.
+ *
  * Nota: los eventos de Calendar son solo LECTURA desde la app —
  * para crearlos se usa calendarSync.js.
  */
@@ -45,13 +48,12 @@ function normalizarEvento(e) {
   }
 }
 
-export function useGoogleCalendar(usuarioEmail) {
+export function useGoogleCalendar() {
   const [eventos, setEventos]   = useState([])
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState(null)
 
   const fetchEventos = useCallback(async (fechaInicio, fechaFin) => {
-    if (!usuarioEmail) return []
     setLoading(true)
     setError(null)
 
@@ -60,7 +62,6 @@ export function useGoogleCalendar(usuarioEmail) {
       if (!jwt) throw new Error('Sin sesión activa')
 
       const params = new URLSearchParams({
-        usuario_email: usuarioEmail,
         ...(fechaInicio
           ? { timeMin: fechaInicio instanceof Date ? fechaInicio.toISOString() : fechaInicio }
           : {}),
@@ -96,7 +97,7 @@ export function useGoogleCalendar(usuarioEmail) {
     } finally {
       setLoading(false)
     }
-  }, [usuarioEmail])
+  }, [])
 
   return { eventos, loading, error, fetchEventos }
 }

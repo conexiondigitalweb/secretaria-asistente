@@ -10,7 +10,6 @@ import Modal from '../components/ui/Modal'
 import FormEvento from '../components/agenda/FormEvento'
 import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
-import { useAuth } from '../hooks/useAuth'
 import { sincronizarConCalendar } from '../lib/calendarSync'
 import { useGmailSync } from '../hooks/useGmailSync'
 import { useBorradores } from '../hooks/useBorradores'
@@ -30,7 +29,6 @@ function fechaLarga() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
   const { tareas, loading: loadingTareas, error: errorTareas, refetch: refetchTareas } = useTareas()
   const { eventos, loading: loadingEventos, refetch: refetchEventos, actualizarEvento } = useAgenda()
   const { sincronizando, ultimaSync, resultado, gmailConectado, sincronizarAhora } =
@@ -140,15 +138,13 @@ export default function Dashboard() {
             if (res.tipo === 'evento') {
               refetchEventos()
               // Sincronizar evento creado con Google Calendar (best-effort)
-              if (user?.email) {
-                const datos = b.datos_extraidos ?? {}
-                sincronizarConCalendar(res.id, {
-                  titulo:       b.asunto,
-                  descripcion:  b.cuerpo_resumen,
-                  fecha_inicio: datos.fecha_hora_reunion,
-                  lugar:        datos.lugar,
-                }, user.email).catch(e => console.warn('[Dashboard] calSync:', e.message))
-              }
+              const datos = b.datos_extraidos ?? {}
+              sincronizarConCalendar(res.id, {
+                titulo:       b.asunto,
+                descripcion:  b.cuerpo_resumen,
+                fecha_inicio: datos.fecha_hora_reunion,
+                lugar:        datos.lugar,
+              }).catch(e => console.warn('[Dashboard] calSync:', e.message))
             }
           } else if (res.needsFormEvento) {
             // Convocatoria sin fecha → abrir FormEvento con datos precargados
@@ -274,10 +270,8 @@ export default function Dashboard() {
                   setModalEvento(null)
                   refetchEventos()
                   // Sincronizar con Calendar (best-effort)
-                  if (user?.email) {
-                    sincronizarConCalendar(res.id, datosEvento, user.email)
-                      .catch(e => console.warn('[Dashboard] calSync:', e.message))
-                  }
+                  sincronizarConCalendar(res.id, datosEvento)
+                    .catch(e => console.warn('[Dashboard] calSync:', e.message))
                 } else {
                   setErrorEvento(res.error ?? 'Error al crear el evento')
                 }

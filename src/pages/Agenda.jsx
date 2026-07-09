@@ -136,7 +136,7 @@ export default function Agenda() {
   const { user }  = useAuth()
   const { eventos: eventosLocales, loading, error, crearEvento, actualizarEvento, eliminarEvento } = useAgenda()
   const { eventos: eventosCalendar, loading: loadingCalendar, fetchEventos: fetchCalendarEventos } =
-    useGoogleCalendar(user?.email)
+    useGoogleCalendar()
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando]         = useState(null)
@@ -212,10 +212,8 @@ export default function Agenda() {
         : await crearEvento(datos)
 
       // Sincronizar con Google Calendar solo al CREAR (no al editar, que es más complejo)
-      if (!editando && user?.email) {
-        const { error: calErr } = await sincronizarConCalendar(
-          guardado.id, datos, user.email
-        )
+      if (!editando) {
+        const { error: calErr } = await sincronizarConCalendar(guardado.id, datos)
         if (calErr) {
           // No bloqueante: mostrar aviso sutil
           setCalendarSyncMsg(calErr)

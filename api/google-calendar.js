@@ -1,20 +1,24 @@
 /**
  * Vercel Serverless Function — /api/google-calendar
  *
- * Proxy para la Google Calendar API usando el mismo token OAuth de gmail_tokens.
- * El access_token es compartido entre Gmail y Calendar (mismo scope de OAuth).
+ * Proxy para la Google Calendar API. SIEMPRE usa el token OAuth de la
+ * cuenta institucional (usuario con role='admin' en user_profiles),
+ * sin importar qué usuario de la app esté haciendo la llamada — los
+ * asistentes (role='agenda') no tienen ni deben tener su propia
+ * conexión OAuth con Google.
  *
  * Variables requeridas: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  *                       GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET
  *
- * GET  ?usuario_email=&timeMin=&timeMax=  → lista eventos entre fechas
- * POST { usuario_email, evento }          → crea evento nuevo
- * PUT  { usuario_email, calendarEventId, evento } → actualiza evento existente
+ * GET  ?timeMin=&timeMax=            → lista eventos entre fechas
+ * POST { evento }                    → crea evento nuevo
+ * PUT  { calendarEventId, evento }   → actualiza evento existente
  *
- * Auth: Authorization: Bearer <supabase_jwt>
+ * Auth: Authorization: Bearer <supabase_jwt> de cualquier usuario activo
+ *       (admin o agenda) — no se exige que coincida con la cuenta OAuth.
  */
 
-import { makeSupabase, obtenerTokenValido, verificarJwt } from './_tokenUtils.js'
+import { makeSupabase, obtenerTokenValido, verificarUsuarioActivo, obtenerEmailAdmin } from './_tokenUtils.js'
 
 const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3'
 
@@ -53,25 +57,23 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: err.message })
   }
 
-  const authHeader    = req.headers.authorization ?? ''
-  const userJwt       = authHeader.replace('Bearer ', '').trim()
-  const usuario_email = method === 'GET'
-    ? req.query?.usuario_email
-    : req.body?.usuario_email
+  const authHeader = req.headers.authorization ?? ''
+  const userJwt     = authHeader.replace('Bearer ', '').trim()
 
-  if (!usuario_email) {
-    return res.status(400).json({ ok: false, error: 'usuario_email requerido' })
-  }
-
-  const user = await verificarJwt(userJwt, usuario_email, supabase)
+  const user = await verificarUsuarioActivo(userJwt, supabase)
   if (!user) {
-    return res.status(401).json({ ok: false, error: 'Token inválido o no corresponde al usuario' })
+    return res.status(401).json({ ok: false, error: 'Token inválido o usuario inactivo' })
   }
 
   try {
-    const accessToken = await obtenerTokenValido(usuario_email, supabase)
+    const emailAdmin = await obtenerEmailAdmin(supabase)
+    if (!emailAdmin) {
+      return res.status(400).json({ ok: false, error: 'No hay una cuenta admin configurada' })
+    }
+
+    const accessToken = await obtenerTokenValido(emailAdmin, supabase)
     if (!accessToken) {
-      return res.status(400).json({ ok: false, error: 'Google Calendar no conectado (falta token)' })
+      return res.status(400).json({ ok: false, error: 'Google Calendar no conectado (falta token del admin)' })
     }
 
     // ── GET — listar eventos ─────────────────────────────────────────────────

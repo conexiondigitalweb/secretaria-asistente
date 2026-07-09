@@ -4,6 +4,11 @@
  * Usado por Agenda.jsx y Dashboard.jsx (al aprobar borradores).
  * Siempre "best effort" — si falla, el evento local en Supabase ya fue guardado.
  *
+ * La sincronización SIEMPRE usa el token OAuth de la cuenta admin
+ * (resuelto server-side en /api/google-calendar), sin importar qué
+ * usuario de la app esté creando el evento — los asistentes con rol
+ * 'agenda' no tienen conexión OAuth propia.
+ *
  * @returns {{ calendarEventId: string|null, error: string|null }}
  */
 
@@ -43,10 +48,9 @@ function toCalendarEvent({ titulo, descripcion, fecha_inicio, fecha_fin, lugar }
  *
  * @param {string} eventoId       — UUID del evento en eventos_agenda
  * @param {object} datosEvento    — { titulo, fecha_inicio, fecha_fin, lugar, descripcion }
- * @param {string} usuarioEmail   — email del usuario autenticado
  * @returns {{ calendarEventId: string|null, error: string|null }}
  */
-export async function sincronizarConCalendar(eventoId, datosEvento, usuarioEmail) {
+export async function sincronizarConCalendar(eventoId, datosEvento) {
   try {
     const jwt = await getJwt()
     if (!jwt) return { calendarEventId: null, error: 'Sin sesión activa' }
@@ -59,7 +63,7 @@ export async function sincronizarConCalendar(eventoId, datosEvento, usuarioEmail
         'Content-Type': 'application/json',
         Authorization:  `Bearer ${jwt}`,
       },
-      body: JSON.stringify({ usuario_email: usuarioEmail, evento: calendarEvento }),
+      body: JSON.stringify({ evento: calendarEvento }),
     })
 
     const data = await res.json()
