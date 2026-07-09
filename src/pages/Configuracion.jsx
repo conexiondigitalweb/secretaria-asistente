@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useFuncionarios } from '../hooks/useFuncionarios'
 import { useAuth } from '../hooks/useAuth'
+import { useUserProfile } from '../hooks/useUserProfile'
 import ListaFuncionarios from '../components/configuracion/ListaFuncionarios'
 import FormFuncionario from '../components/configuracion/FormFuncionario'
 import SeccionGmail from '../components/configuracion/SeccionGmail'
+import PanelUsuarios from '../components/configuracion/PanelUsuarios'
 import Modal from '../components/ui/Modal'
 
 export default function Configuracion() {
   const { user } = useAuth()
+  const { profile } = useUserProfile(user?.id)
   const { funcionarios, loading, error, crearFuncionario, actualizarFuncionario, toggleActivo } = useFuncionarios()
 
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -155,6 +158,9 @@ export default function Configuracion() {
 
       {/* ── Sección Gmail ────────────────────────────────────────────── */}
       <SeccionGmail usuarioEmail={user?.email} />
+
+      {/* ── Panel de usuarios y permisos (solo admin) ───────────────────── */}
+      {profile?.role === 'admin' && <PanelUsuarios />}
 
       {/* Modal crear/editar */}
       <Modal

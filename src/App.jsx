@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, ClipboardList, Calendar,
   FileText, Settings, LogOut,
 } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
+import { useUserProfile } from './hooks/useUserProfile'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Tareas from './pages/Tareas'
@@ -37,16 +38,46 @@ const PAGE_MAP = {
   configuracion: Configuracion,
 }
 
+// Páginas permitidas por rol. El rol 'agenda' solo ve Agenda.
+const PAGINAS_PERMITIDAS = {
+  admin:  ['dashboard', 'tareas', 'agenda', 'documentos', 'configuracion'],
+  agenda: ['agenda'],
+}
+
 export default function App() {
   const { user, loading, signOut } = useAuth()
+  const { profile, loading: loadingPerfil } = useUserProfile(user?.id)
   const [page, setPage] = useState('dashboard')
+  const [mensajeAcceso, setMensajeAcceso] = useState(null)
+
+  const rol = profile?.role
+  const paginasPermitidas = PAGINAS_PERMITIDAS[rol] ?? []
+
+  // Si el rol cambia (o carga) y la página actual no está permitida, redirige.
+  useEffect(() => {
+    if (!rol) return
+    if (!paginasPermitidas.includes(page)) {
+      setPage(paginasPermitidas[0] ?? 'agenda')
+      setMensajeAcceso('Sin acceso a esta sección')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rol])
+
+  function irA(id) {
+    if (!paginasPermitidas.includes(id)) {
+      setMensajeAcceso('Sin acceso a esta sección')
+      return
+    }
+    setMensajeAcceso(null)
+    setPage(id)
+  }
 
   // ── Ruta especial: /oauth/callback (Google OAuth redirect) ──
   if (window.location.pathname === '/oauth/callback') {
     return <OAuthCallback onNavegar={(p) => { window.history.replaceState({}, '', '/'); setPage(p) }} />
   }
 
-  if (loading) {
+  if (loading || (user && loadingPerfil)) {
     return (
       <div className="min-h-screen bg-surface-2 flex items-center justify-center">
         <div className="text-center">
@@ -59,7 +90,29 @@ export default function App() {
 
   if (!user) return <Login />
 
-  const PageComponent = PAGE_MAP[page]
+  if (!profile || !profile.active) {
+    return (
+      <div className="min-h-screen bg-surface-2 flex items-center justify-center p-4">
+        <div className="text-center max-w-sm">
+          <img src="/logo-secretaria.jpg" alt="Logo" className="h-16 mx-auto mb-4 opacity-70 object-contain" />
+          <p className="text-sm text-text-secondary">
+            {profile ? 'Tu cuenta está desactivada.' : 'Tu cuenta no tiene un rol asignado todavía.'}
+            {' '}Contacta al administrador.
+          </p>
+          <button
+            onClick={signOut}
+            className="mt-4 text-xs text-text-muted hover:text-destructive transition-colors"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const paginasVisibles = PAGES.filter(p => paginasPermitidas.includes(p.id))
+  const paginasVisiblesMovil = BOTTOM_PAGES.filter(p => paginasPermitidas.includes(p.id))
+  const PageComponent = PAGE_MAP[page] ?? PAGE_MAP[paginasPermitidas[0]]
 
   return (
     <div className="flex flex-col h-screen bg-surface-2 md:flex-row">
@@ -89,10 +142,10 @@ export default function App() {
 
         {/* Navegación */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {PAGES.map(({ id, label, icon: Icon }) => (
+          {paginasVisibles.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setPage(id)}
+              onClick={() => irA(id)}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
                 page === id
@@ -124,18 +177,24 @@ export default function App() {
 
       {/* ── Contenido principal ──────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto pb-16 md:pb-0">
+        {mensajeAcceso && (
+          <div className="m-4 mb-0 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between">
+            {mensajeAcceso}
+            <button onClick={() => setMensajeAcceso(null)} className="text-amber-500 hover:text-amber-700 ml-3">✕</button>
+          </div>
+        )}
         <PageComponent />
       </main>
 
       {/* ── Bottom nav — móvil ───────────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface border-t border-border z-30
                       flex items-stretch h-16">
-        {BOTTOM_PAGES.map(({ id, label, icon: Icon }) => {
+        {paginasVisiblesMovil.map(({ id, label, icon: Icon }) => {
           const active = page === id
           return (
             <button
               key={id}
-              onClick={() => setPage(id)}
+              onClick={() => irA(id)}
               className={cn(
                 'relative flex-1 flex flex-col items-center justify-center gap-0.5 pt-1 transition-colors',
                 active ? 'text-primary' : 'text-text-muted'
