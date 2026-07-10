@@ -76,6 +76,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: false, error: msg })
     }
 
+    console.log(`[gmail-mark-read] Marcado como leído: ${message_id}`)
     return res.status(200).json({ ok: true })
 
   } catch (err) {

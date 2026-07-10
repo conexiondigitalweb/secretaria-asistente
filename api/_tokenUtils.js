@@ -60,13 +60,17 @@ export async function refreshAccessToken(refreshToken) {
  * @returns {string|null}  access_token válido, o null si no hay token guardado
  */
 export async function obtenerTokenValido(usuarioEmail, supabase) {
+  // maybeSingle (no single): si no hay fila no es un error, es "no conectado".
   const { data: tokenRow } = await supabase
     .from('gmail_tokens')
     .select('access_token, refresh_token, expires_at')
     .eq('usuario_email', usuarioEmail)
-    .single()
+    .maybeSingle()
 
-  if (!tokenRow) return null
+  if (!tokenRow) {
+    console.warn(`[tokenUtils] No hay gmail_tokens para ${usuarioEmail}`)
+    return null
+  }
 
   // Token vigente (con 60 s de margen)
   const expira = new Date(tokenRow.expires_at).getTime()

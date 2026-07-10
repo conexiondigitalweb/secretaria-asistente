@@ -68,6 +68,16 @@ async function gmailFetch(path, accessToken) {
 const LABELS_IGNORAR = new Set(['TRASH'])
 
 /**
+ * Extrae la dirección de correo de un header "From" tipo `Nombre <email>`
+ * (o la devuelve tal cual si no viene en ese formato).
+ */
+function extraerEmailDeHeader(from) {
+  if (!from) return null
+  const match = from.match(/<(.+?)>/)
+  return (match ? match[1] : from).trim()
+}
+
+/**
  * Aplana recursivamente el árbol de partes MIME de un mensaje, devolviendo
  * solo las partes "hoja" (sin sub-partes) — necesario porque Gmail anida
  * invitaciones típicamente como multipart/mixed → multipart/alternative
@@ -255,11 +265,13 @@ export default async function handler(req, res) {
     let nuevoHistoryId       = null
 
     if (syncRow?.history_id) {
-      // Sync incremental — todos los mensajes nuevos (sin filtro labelId para incluir todas las pestañas)
+      // Sync incremental — solo mensajes agregados a INBOX (labelId=INBOX excluye
+      // los que solo llegan a SENT, DRAFT, etc. — antes no se filtraba por label
+      // y los correos enviados por la propia cuenta también generaban borradores).
       // TRASH se filtra DESPUÉS de obtener detalles, antes de clasificar con Claude.
       // SPAM ya NO se filtra aquí — se deja que Claude lo clasifique (ver LABELS_IGNORAR arriba).
       const histData = await gmailFetch(
-        `/history?startHistoryId=${syncRow.history_id}&historyTypes=messageAdded`,
+        `/history?startHistoryId=${syncRow.history_id}&historyTypes=messageAdded&labelId=INBOX`,
         accessToken
       )
       nuevoHistoryId = histData.historyId ?? syncRow.history_id
@@ -275,10 +287,11 @@ export default async function handler(req, res) {
         }
       }
     } else {
-      // Primera sync — últimos 50 correos (sin filtro de pestaña para incluir todas)
-      // TRASH se filtra después al obtener detalles del mensaje — SPAM ya no
+      // Primera sync — últimos 50 correos, restringido a INBOX (antes se
+      // listaba sin filtro de label e incluía correos ENVIADOS por la propia
+      // cuenta, que terminaban creando borradores/tareas indebidamente).
       const listData = await gmailFetch(
-        '/messages?maxResults=50',
+        '/messages?maxResults=50&labelIds=INBOX',
         accessToken
       )
       nuevoHistoryId = listData.historyId ?? null
@@ -305,6 +318,18 @@ export default async function handler(req, res) {
         // Ignorar solo TRASH — SPAM ya no se descarta aquí, Claude decide la categoría
         if (correo.labelIds.some(l => LABELS_IGNORAR.has(l))) {
           console.log(`[gmail-sync] Ignorando mensaje ${messageId} (TRASH)`)
+          continue
+        }
+
+        // Seguridad adicional (defensa en profundidad además del filtro
+        // labelIds=INBOX en el listado): nunca procesar un correo ENVIADO por
+        // la propia cuenta — ni por label SENT, ni si el remitente coincide
+        // con la cuenta que se está sincronizando.
+        const remitenteEmail = extraerEmailDeHeader(correo.remitente)
+        const esEnviado = correo.labelIds.includes('SENT') ||
+          (remitenteEmail && remitenteEmail.toLowerCase() === usuario_email.toLowerCase())
+        if (esEnviado) {
+          console.log(`[gmail-sync] Ignorando correo enviado: ${messageId}`)
           continue
         }
 

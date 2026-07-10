@@ -24,7 +24,10 @@ import { sincronizarConCalendar } from '../lib/calendarSync'
 // Siempre usa el token OAuth del admin (resuelto server-side en
 // /api/gmail-mark-read) — ya no depende del email de quien aprueba/rechaza.
 async function marcarComoLeido(messageId) {
-  if (!messageId) return
+  if (!messageId) {
+    console.warn('[useBorradores] mark-read omitido: borrador sin gmail_message_id')
+    return
+  }
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const jwt = session?.access_token
