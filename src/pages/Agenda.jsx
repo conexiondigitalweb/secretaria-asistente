@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useAgenda } from '../hooks/useAgenda'
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar'
+import { useCalendarioEventos } from '../hooks/useCalendarioEventos'
 import { useAuth } from '../hooks/useAuth'
+import { useUserProfile } from '../hooks/useUserProfile'
 import FormEvento from '../components/agenda/FormEvento'
+import CalendarioVista from '../components/agenda/CalendarioVista'
 import Modal from '../components/ui/Modal'
 import { notificarDelegacion } from '../lib/notificaciones'
 import { sincronizarConCalendar } from '../lib/calendarSync'
@@ -134,17 +137,26 @@ function EventoCard({ evento, onEditar, onEliminar }) {
 
 export default function Agenda() {
   const { user }  = useAuth()
+  const { profile } = useUserProfile(user?.id)
   const { eventos: eventosLocales, loading, error, crearEvento, actualizarEvento, eliminarEvento } = useAgenda()
   const { eventos: eventosCalendar, loading: loadingCalendar, fetchEventos: fetchCalendarEventos } =
     useGoogleCalendar()
+  const {
+    eventos: eventosCalendarioVista, loading: loadingCalendarioVista,
+    fetchRango: fetchRangoCalendario, invalidar: invalidarCalendarioVista,
+  } = useCalendarioEventos()
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando]         = useState(null)
+  const [prellenoCrear, setPrellenoCrear] = useState(null) // fecha pre-llenada desde clic en slot del calendario
   const [guardando, setGuardando]       = useState(false)
   const [errorMsg, setErrorMsg]         = useState(null)
   const [calendarSyncMsg, setCalendarSyncMsg] = useState(null) // aviso no-bloqueante de Calendar
   const [filtro, setFiltro]             = useState('proximos') // 'proximos' | 'pasados' | 'todos'
   const [confirmarEliminar, setConfirmarEliminar] = useState(null)
+  const [vista, setVista]               = useState('lista') // 'lista' | 'calendario'
+  const [vistaInicializada, setVistaInicializada] = useState(false)
+  const [detalleEvento, setDetalleEvento] = useState(null) // detalle solo-lectura desde clic en calendario
   // Paso 2 del modal: notificación después de guardar
   // { evento, funcionario, correoEnviado, waAbierto, enviando, error }
   const [notif, setNotif] = useState(null)
@@ -156,6 +168,14 @@ export default function Agenda() {
     const fin    = new Date(); fin.setMonth(fin.getMonth() + 3); fin.setDate(1)
     fetchCalendarEventos(inicio, fin)
   }, [user?.email, fetchCalendarEventos])
+
+  // Vista por defecto: calendario para rol 'agenda', lista para 'admin' —
+  // solo se aplica una vez, al cargar el perfil, para no pisar la elección manual del usuario.
+  useEffect(() => {
+    if (vistaInicializada || !profile) return
+    setVista(profile.role === 'agenda' ? 'calendario' : 'lista')
+    setVistaInicializada(true)
+  }, [profile, vistaInicializada])
 
   // Construir IDs de Calendar de eventos locales sincronizados (para deduplicar)
   const calendarIdsLocales = new Set(
@@ -184,22 +204,48 @@ export default function Agenda() {
 
   const grupos = agruparPorDia(eventosFiltrados)
 
-  function abrirCrear() {
+  function abrirCrear(fechaPreslot) {
     setEditando(null)
     setErrorMsg(null)
     setNotif(null)
+    setPrellenoCrear(fechaPreslot
+      ? {
+          fecha_inicio: fechaPreslot.toISOString(),
+          fecha_fin:    new Date(fechaPreslot.getTime() + 60 * 60 * 1000).toISOString(),
+        }
+      : null)
     setModalAbierto(true)
   }
   function abrirEditar(e) {
     setEditando(e)
     setErrorMsg(null)
     setNotif(null)
+    setPrellenoCrear(null)
     setModalAbierto(true)
   }
   function cerrarModal() {
     setModalAbierto(false)
     setEditando(null)
+    setPrellenoCrear(null)
     setNotif(null)
+  }
+
+  // Clic en un evento de la vista de calendario → detalle de solo lectura.
+  function handleEventoCalendarioClick(extendedProps, eventoFC) {
+    setDetalleEvento({
+      titulo:      eventoFC.title,
+      inicio:      eventoFC.start,
+      fin:         eventoFC.end,
+      lugar:       extendedProps.lugar,
+      descripcion: extendedProps.descripcion,
+      origen:      extendedProps.origen,
+      eventoId:    extendedProps.eventoId,
+    })
+  }
+
+  // Cambio de rango en la vista de calendario → traer eventos de ese rango.
+  function handleRangoCalendarioChange(inicio, fin) {
+    fetchRangoCalendario(inicio, fin)
   }
 
   async function handleGuardar(datos) {
@@ -224,6 +270,10 @@ export default function Agenda() {
           fetchCalendarEventos(inicio, fin)
         }
       }
+
+      // Invalidar el cache de la vista de calendario para que refleje el
+      // evento recién creado/editado la próxima vez que se consulte el rango.
+      invalidarCalendarioVista()
 
       // Si el evento guardado tiene delegado con datos de contacto → paso 2: notificación
       const delegado = guardado?.delegado
@@ -307,21 +357,40 @@ export default function Agenda() {
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-1 mb-4">
+      {/* Toggle Lista / Calendario */}
+      <div className="flex gap-1 mb-3">
         {[
-          { value: 'proximos', label: 'Próximos' },
-          { value: 'pasados',  label: 'Pasados' },
-          { value: 'todos',    label: 'Todos' },
+          { value: 'lista',      label: '📋 Lista' },
+          { value: 'calendario', label: '🗓️ Calendario' },
         ].map(({ value, label }) => (
-          <button key={value} onClick={() => setFiltro(value)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filtro === value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
+          <button key={value} onClick={() => setVista(value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+              vista === value
+                ? 'bg-primary text-white border-primary'
+                : 'text-slate-500 border-slate-200 hover:bg-slate-100'
             }`}>
             {label}
           </button>
         ))}
       </div>
+
+      {/* Filtros — solo aplican a la vista de lista */}
+      {vista === 'lista' && (
+        <div className="flex gap-1 mb-4">
+          {[
+            { value: 'proximos', label: 'Próximos' },
+            { value: 'pasados',  label: 'Pasados' },
+            { value: 'todos',    label: 'Todos' },
+          ].map(({ value, label }) => (
+            <button key={value} onClick={() => setFiltro(value)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                filtro === value ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Error global */}
       {(error || errorMsg) && (
@@ -342,7 +411,21 @@ export default function Agenda() {
       )}
 
       {/* Contenido */}
-      {loading ? (
+      {vista === 'calendario' ? (
+        <>
+          <p className="text-xs text-slate-400 mb-2 flex items-center gap-3">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-600 inline-block" /> Sincronizado con Calendar</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500 inline-block" /> Local, pendiente de sincronizar</span>
+          </p>
+          <CalendarioVista
+            eventos={eventosCalendarioVista}
+            loading={loadingCalendarioVista}
+            onRangeChange={handleRangoCalendarioChange}
+            onSlotClick={abrirCrear}
+            onEventClick={handleEventoCalendarioClick}
+          />
+        </>
+      ) : loading ? (
         <div className="space-y-4">
           {[1,2,3].map(i => (
             <div key={i} className="space-y-2">
@@ -412,7 +495,8 @@ export default function Agenda() {
               </div>
             )}
             <FormEvento
-              inicial={editando}
+              inicial={editando ?? prellenoCrear}
+              fechaVacia={false}
               onSubmit={handleGuardar}
               onCancel={cerrarModal}
               loading={guardando}
@@ -524,6 +608,59 @@ export default function Agenda() {
             >
               {notif.correoEnviado || notif.waAbierto ? 'Listo' : 'Cerrar sin notificar'}
             </button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Detalle de solo lectura — clic en un evento de la vista de calendario */}
+      <Modal
+        open={!!detalleEvento}
+        onClose={() => setDetalleEvento(null)}
+        title={detalleEvento?.titulo ?? 'Evento'}
+      >
+        {detalleEvento && (
+          <div className="flex flex-col gap-3">
+            <div className={`inline-flex self-start items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border font-medium
+              ${detalleEvento.origen === 'calendar'
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+              {detalleEvento.origen === 'calendar' ? '📆 Google Calendar' : '⏳ Local · pendiente de sincronizar'}
+            </div>
+
+            <p className="text-sm text-slate-700">
+              {detalleEvento.inicio && new Date(detalleEvento.inicio).toLocaleString('es-CO', {
+                weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: true,
+              })}
+              {detalleEvento.fin && (
+                ` → ${new Date(detalleEvento.fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+              )}
+            </p>
+
+            {detalleEvento.lugar && (
+              <p className="text-xs text-slate-500">📍 {detalleEvento.lugar}</p>
+            )}
+            {detalleEvento.descripcion && (
+              <p className="text-xs text-slate-500 whitespace-pre-wrap">{detalleEvento.descripcion}</p>
+            )}
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              {detalleEvento.origen === 'local' && (
+                <button
+                  onClick={() => {
+                    const local = eventosLocales.find(e => e.id === detalleEvento.eventoId)
+                    setDetalleEvento(null)
+                    if (local) abrirEditar(local)
+                  }}
+                  className="flex-1 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  ✏️ Editar
+                </button>
+              )}
+              <button onClick={() => setDetalleEvento(null)}
+                className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors">
+                Cerrar
+              </button>
+            </div>
           </div>
         )}
       </Modal>

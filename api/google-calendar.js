@@ -11,6 +11,11 @@
  *                       GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET
  *
  * GET  ?timeMin=&timeMax=            → lista eventos entre fechas
+ *      (acepta también fecha_inicio/fecha_fin como alias). Además de los
+ *      eventos de Google Calendar (`items`), la respuesta incluye
+ *      `localPendientes`: eventos locales (eventos_agenda) del mismo rango
+ *      que AÚN NO tienen calendar_event_id (creados pero no sincronizados),
+ *      para que la vista de calendario muestre la disponibilidad completa.
  * POST { evento }                    → crea evento nuevo
  * PUT  { calendarEventId, evento }   → actualiza evento existente
  *
@@ -78,7 +83,10 @@ export default async function handler(req, res) {
 
     // ── GET — listar eventos ─────────────────────────────────────────────────
     if (method === 'GET') {
-      const { timeMin, timeMax } = req.query ?? {}
+      const query = req.query ?? {}
+      const timeMin = query.timeMin ?? query.fecha_inicio
+      const timeMax = query.timeMax ?? query.fecha_fin
+
       const params = new URLSearchParams({
         singleEvents: 'true',
         orderBy:      'startTime',
@@ -92,7 +100,30 @@ export default async function handler(req, res) {
         accessToken
       )
 
-      return res.status(200).json({ ok: true, items: data?.items ?? [] })
+      // Eventos locales del mismo rango que aún no fueron sincronizados
+      // con Google Calendar (calendar_event_id IS NULL) — se combinan con
+      // los de Calendar para que la vista de disponibilidad esté completa.
+      let localPendientes = []
+      try {
+        let localQuery = supabase
+          .from('eventos_agenda')
+          .select('id, titulo, descripcion, tipo, lugar, fecha_inicio, fecha_fin, delegado_id')
+          .is('calendar_event_id', null)
+
+        if (timeMin) localQuery = localQuery.gte('fecha_inicio', timeMin)
+        if (timeMax) localQuery = localQuery.lte('fecha_inicio', timeMax)
+
+        const { data: locales, error: localErr } = await localQuery
+        if (!localErr) localPendientes = locales ?? []
+      } catch (e) {
+        console.warn('[google-calendar] Error obteniendo eventos locales pendientes:', e.message)
+      }
+
+      return res.status(200).json({
+        ok:    true,
+        items: data?.items ?? [],
+        localPendientes,
+      })
     }
 
     // ── POST — crear evento ──────────────────────────────────────────────────
