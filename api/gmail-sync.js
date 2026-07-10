@@ -60,8 +60,47 @@ async function gmailFetch(path, accessToken) {
   return res.json()
 }
 
-// Labels de Gmail que indican basura — no gastar tokens de Claude en ellos
-const LABELS_IGNORAR = new Set(['SPAM', 'TRASH'])
+// Solo TRASH se descarta sin pasar por Claude — SPAM ya NO se ignora
+// automáticamente: Gmail marca como spam muchos correos automatizados
+// legítimos (facturas de servicios públicos, notificaciones institucionales)
+// y es Claude quien debe decidir la categoría real (ver categoría "factura"
+// en clasificar-correo.js), no el label de Gmail.
+const LABELS_IGNORAR = new Set(['TRASH'])
+
+/**
+ * Aplana recursivamente el árbol de partes MIME de un mensaje, devolviendo
+ * solo las partes "hoja" (sin sub-partes) — necesario porque Gmail anida
+ * invitaciones típicamente como multipart/mixed → multipart/alternative
+ * → text/plain + text/html, más una parte text/calendar (.ics) como hermana.
+ * Buscar solo en payload.parts de primer nivel (como antes) no encontraba
+ * nada en ese caso y el body caía al snippet truncado.
+ */
+function aplanarPartesMime(payload) {
+  if (!payload) return []
+  if (payload.parts && payload.parts.length > 0) {
+    return payload.parts.flatMap(aplanarPartesMime)
+  }
+  return [payload]
+}
+
+/**
+ * Convierte HTML a texto plano preservando saltos de línea básicos
+ * (br/p/div/li/tr) antes de eliminar el resto de las etiquetas — el strip
+ * anterior colapsaba todo el HTML a una sola línea, dificultando que Claude
+ * distinga fecha/hora/lugar en invitaciones con estructura de tabla.
+ */
+function htmlATexto(html) {
+  return html
+    .replace(/<(br|BR)\s*\/?>/g, '\n')
+    .replace(/<\/(p|P|div|DIV|li|LI|tr|TR|h[1-6]|H[1-6])>/g, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
 
 async function getMensajeDetalle(messageId, accessToken) {
   const msg = await gmailFetch(`/messages/${messageId}?format=full`, accessToken)
@@ -71,31 +110,39 @@ async function getMensajeDetalle(messageId, accessToken) {
     headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
 
   function extractBody(payload) {
-    if (!payload) return ''
-    if (payload.mimeType === 'text/plain' && payload.body?.data) {
-      return Buffer.from(payload.body.data, 'base64').toString('utf-8')
+    if (!payload) return msg.snippet ?? ''
+
+    // Partes hoja del árbol MIME completo (recursivo, no solo primer nivel)
+    const partes = payload.parts && payload.parts.length > 0
+      ? aplanarPartesMime(payload)
+      : [payload]
+
+    const plano = partes.find(p => p.mimeType === 'text/plain' && p.body?.data)
+    const html  = partes.find(p => p.mimeType === 'text/html' && p.body?.data)
+    const ics   = partes.find(p =>
+      (p.mimeType === 'text/calendar' || p.mimeType === 'application/ics') && p.body?.data)
+
+    let texto = ''
+    if (plano) {
+      texto = Buffer.from(plano.body.data, 'base64').toString('utf-8')
+    } else if (html) {
+      texto = htmlATexto(Buffer.from(html.body.data, 'base64').toString('utf-8'))
     }
-    if (payload.parts) {
-      const plain = payload.parts.find(p => p.mimeType === 'text/plain')
-      if (plain?.body?.data) {
-        return Buffer.from(plain.body.data, 'base64').toString('utf-8')
-      }
-      const html = payload.parts.find(p => p.mimeType === 'text/html')
-      if (html?.body?.data) {
-        return Buffer.from(html.body.data, 'base64')
-          .toString('utf-8')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-      }
+
+    // Adjuntar datos de invitación de calendario (.ics) si existen — contienen
+    // DTSTART/DTEND/LOCATION/ATTENDEE que el texto del correo puede no repetir.
+    if (ics) {
+      const icsTexto = Buffer.from(ics.body.data, 'base64').toString('utf-8')
+      texto = `${texto}\n\n[Datos de invitación de calendario:]\n${icsTexto.slice(0, 1500)}`.trim()
     }
-    return msg.snippet ?? ''
+
+    return texto || (msg.snippet ?? '')
   }
 
   return {
     id:        msg.id,
     threadId:  msg.threadId,
-    labelIds:  msg.labelIds ?? [],   // ← necesario para filtrar SPAM/TRASH
+    labelIds:  msg.labelIds ?? [],   // ← necesario para filtrar TRASH
     asunto:    get('Subject') || '(sin asunto)',
     remitente: get('From'),
     fecha:     get('Date'),
@@ -209,7 +256,8 @@ export default async function handler(req, res) {
 
     if (syncRow?.history_id) {
       // Sync incremental — todos los mensajes nuevos (sin filtro labelId para incluir todas las pestañas)
-      // SPAM y TRASH se filtran DESPUÉS de obtener detalles, antes de clasificar con Claude
+      // TRASH se filtra DESPUÉS de obtener detalles, antes de clasificar con Claude.
+      // SPAM ya NO se filtra aquí — se deja que Claude lo clasifique (ver LABELS_IGNORAR arriba).
       const histData = await gmailFetch(
         `/history?startHistoryId=${syncRow.history_id}&historyTypes=messageAdded`,
         accessToken
@@ -228,7 +276,7 @@ export default async function handler(req, res) {
       }
     } else {
       // Primera sync — últimos 50 correos (sin filtro de pestaña para incluir todas)
-      // SPAM y TRASH se filtran después al obtener detalles del mensaje
+      // TRASH se filtra después al obtener detalles del mensaje — SPAM ya no
       const listData = await gmailFetch(
         '/messages?maxResults=50',
         accessToken
@@ -254,17 +302,19 @@ export default async function handler(req, res) {
       try {
         const correo = await getMensajeDetalle(messageId, accessToken)
 
-        // Ignorar SPAM y TRASH — Gmail ya los identificó, no gastar tokens de Claude
+        // Ignorar solo TRASH — SPAM ya no se descarta aquí, Claude decide la categoría
         if (correo.labelIds.some(l => LABELS_IGNORAR.has(l))) {
-          console.log(`[gmail-sync] Ignorando mensaje ${messageId} (SPAM/TRASH)`)
+          console.log(`[gmail-sync] Ignorando mensaje ${messageId} (TRASH)`)
           continue
         }
 
-        // Clasificar con Claude
+        // Clasificar con Claude — se le pasa la fecha real del correo para que
+        // pueda resolver fechas relativas ("próximo lunes") con el año correcto
         const clasificacion = await clasificarCorreo({
-          asunto:    correo.asunto,
-          cuerpo:    correo.cuerpo,
-          remitente: correo.remitente,
+          asunto:       correo.asunto,
+          cuerpo:       correo.cuerpo,
+          remitente:    correo.remitente,
+          fecha_correo: correo.fecha,
         }, ANTHROPIC_API_KEY)
 
         // Armar datos_extraidos

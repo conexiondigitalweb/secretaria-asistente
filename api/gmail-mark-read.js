@@ -4,12 +4,19 @@
  * Quita el label UNREAD de un mensaje de Gmail usando gmail.modify scope.
  * Si falla, responde 200 de todas formas — es efecto secundario, no crítico.
  *
- * Body:  { usuario_email: string, message_id: string }
- * Auth:  Authorization: Bearer <supabase_jwt>
+ * SIEMPRE usa el token OAuth de la cuenta institucional (usuario con
+ * role='admin' en user_profiles), sin importar qué usuario de la app esté
+ * aprobando/rechazando el borrador — los asistentes (role='agenda') no
+ * tienen ni deben tener su propia conexión OAuth con Google. Mismo patrón
+ * centralizado que /api/google-calendar.js.
+ *
+ * Body:  { message_id: string }
+ * Auth:  Authorization: Bearer <supabase_jwt> de cualquier usuario activo
+ *        (admin o agenda) — no se exige que coincida con la cuenta OAuth.
  * Resp:  { ok: boolean, error?: string }
  */
 
-import { makeSupabase, obtenerTokenValido, verificarJwt } from './_tokenUtils.js'
+import { makeSupabase, obtenerTokenValido, verificarUsuarioActivo, obtenerEmailAdmin } from './_tokenUtils.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -23,23 +30,28 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: err.message })
   }
 
-  const authHeader  = req.headers.authorization ?? ''
+  const authHeader = req.headers.authorization ?? ''
   const userJwt     = authHeader.replace('Bearer ', '').trim()
-  const { usuario_email, message_id } = req.body ?? {}
+  const { message_id } = req.body ?? {}
 
-  if (!usuario_email || !message_id) {
-    return res.status(400).json({ ok: false, error: 'Faltan campos: usuario_email, message_id' })
+  if (!message_id) {
+    return res.status(400).json({ ok: false, error: 'Falta campo: message_id' })
   }
 
-  const user = await verificarJwt(userJwt, usuario_email, supabase)
+  const user = await verificarUsuarioActivo(userJwt, supabase)
   if (!user) {
     // No interrumpir el flujo del cliente — responder OK pero sin marcar
-    console.warn('[gmail-mark-read] JWT inválido para', usuario_email)
-    return res.status(200).json({ ok: false, error: 'JWT inválido' })
+    console.warn('[gmail-mark-read] Token inválido o usuario inactivo')
+    return res.status(200).json({ ok: false, error: 'Token inválido o usuario inactivo' })
   }
 
   try {
-    const accessToken = await obtenerTokenValido(usuario_email, supabase)
+    const emailAdmin = await obtenerEmailAdmin(supabase)
+    if (!emailAdmin) {
+      return res.status(200).json({ ok: false, error: 'No hay una cuenta admin configurada' })
+    }
+
+    const accessToken = await obtenerTokenValido(emailAdmin, supabase)
     if (!accessToken) {
       return res.status(200).json({ ok: false, error: 'Sin token de Gmail' })
     }

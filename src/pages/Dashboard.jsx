@@ -10,7 +10,6 @@ import Modal from '../components/ui/Modal'
 import FormEvento from '../components/agenda/FormEvento'
 import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
-import { sincronizarConCalendar } from '../lib/calendarSync'
 import { useGmailSync } from '../hooks/useGmailSync'
 import { useBorradores } from '../hooks/useBorradores'
 import { diasHabilesRestantes, esHoy } from '../lib/utils'
@@ -43,6 +42,7 @@ export default function Dashboard() {
   const [modalEvento, setModalEvento]       = useState(null)
   const [guardandoEvento, setGuardandoEvento] = useState(false)
   const [errorEvento, setErrorEvento]       = useState(null)
+  const [calendarSyncMsg, setCalendarSyncMsg] = useState(null)
 
   const activas    = tareas.filter(t => t.estado !== 'resuelto')
   const pendientes = activas.length
@@ -126,6 +126,20 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* ── Aviso de fallo de sincronización con Google Calendar (best-effort) ── */}
+      {calendarSyncMsg && (
+        <div className="mb-4 flex items-start justify-between gap-3 text-xs text-orange-800
+                        bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+          <span>{calendarSyncMsg}</span>
+          <button
+            onClick={() => setCalendarSyncMsg(null)}
+            className="shrink-0 text-orange-600 hover:text-orange-800 font-medium"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       {/* ── Borradores pendientes de aprobación ───────────────────────── */}
       <BorradoresPendientes
         borradores={borradores}
@@ -137,14 +151,13 @@ export default function Dashboard() {
             refetchTareas()
             if (res.tipo === 'evento') {
               refetchEventos()
-              // Sincronizar evento creado con Google Calendar (best-effort)
-              const datos = b.datos_extraidos ?? {}
-              sincronizarConCalendar(res.id, {
-                titulo:       b.asunto,
-                descripcion:  b.cuerpo_resumen,
-                fecha_inicio: datos.fecha_hora_reunion,
-                lugar:        datos.lugar,
-              }).catch(e => console.warn('[Dashboard] calSync:', e.message))
+              // La sincronización con Calendar ya ocurrió dentro de aprobar();
+              // acá solo mostramos feedback si falló (best-effort, no bloquea).
+              if (res.calendarSync && !res.calendarSync.ok) {
+                setCalendarSyncMsg(
+                  `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${res.calendarSync.error ?? 'error desconocido'}`
+                )
+              }
             }
           } else if (res.needsFormEvento) {
             // Convocatoria sin fecha → abrir FormEvento con datos precargados
@@ -269,9 +282,13 @@ export default function Dashboard() {
                 if (res.ok) {
                   setModalEvento(null)
                   refetchEventos()
-                  // Sincronizar con Calendar (best-effort)
-                  sincronizarConCalendar(res.id, datosEvento)
-                    .catch(e => console.warn('[Dashboard] calSync:', e.message))
+                  // La sincronización con Calendar ya ocurrió dentro de aprobarConEvento();
+                  // acá solo mostramos feedback si falló (best-effort, no bloquea).
+                  if (res.calendarSync && !res.calendarSync.ok) {
+                    setCalendarSyncMsg(
+                      `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${res.calendarSync.error ?? 'error desconocido'}`
+                    )
+                  }
                 } else {
                   setErrorEvento(res.error ?? 'Error al crear el evento')
                 }

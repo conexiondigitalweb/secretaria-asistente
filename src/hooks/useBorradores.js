@@ -18,10 +18,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { calcularFechaLimite, prioridadPorTipo } from '../lib/utils'
+import { sincronizarConCalendar } from '../lib/calendarSync'
 
 // ── Marcar como leído en Gmail (efecto secundario, no bloquea el flujo) ────────
-async function marcarComoLeido(usuarioEmail, messageId) {
-  if (!usuarioEmail || !messageId) return
+// Siempre usa el token OAuth del admin (resuelto server-side en
+// /api/gmail-mark-read) — ya no depende del email de quien aprueba/rechaza.
+async function marcarComoLeido(messageId) {
+  if (!messageId) return
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const jwt = session?.access_token
@@ -33,7 +36,7 @@ async function marcarComoLeido(usuarioEmail, messageId) {
         'Content-Type': 'application/json',
         Authorization:  `Bearer ${jwt}`,
       },
-      body: JSON.stringify({ usuario_email: usuarioEmail, message_id: messageId }),
+      body: JSON.stringify({ message_id: messageId }),
     })
 
     if (!res.ok) {
@@ -52,6 +55,7 @@ const CLASIFICACION_A_TIPO = {
   peticion:     'peticion',
   queja:        'queja',
   convocatoria: null,   // crea evento, no tarea
+  factura:      'otro',
   informativo:  'otro',
   spam:         'otro',
 }
@@ -155,9 +159,25 @@ export function useBorradores() {
           .eq('id', borrador.id)
 
         setBorradores(prev => prev.filter(b => b.id !== borrador.id))
+
+        // Sincronizar con Google Calendar — siempre vía la ruta centralizada
+        // (POST /api/google-calendar, token del admin resuelto server-side).
+        // Best-effort: si falla, el evento local ya quedó guardado.
+        const { calendarEventId, error: calErr } = await sincronizarConCalendar(evento.id, {
+          titulo:       borrador.asunto ?? '(sin asunto)',
+          descripcion:  borrador.cuerpo_resumen,
+          fecha_inicio: datos.fecha_hora_reunion,
+          fecha_fin:    null,
+          lugar:        datos.lugar ?? null,
+        })
+
         // Marcar como leído en Gmail (fire-and-forget)
-        marcarComoLeido(user.email, borrador.gmail_message_id)
-        return { ok: true, tipo: 'evento', id: evento.id }
+        marcarComoLeido(borrador.gmail_message_id)
+
+        return {
+          ok: true, tipo: 'evento', id: evento.id,
+          calendarSync: { ok: !calErr, calendarEventId, error: calErr },
+        }
       }
 
       // ── Todo lo demás → crear tarea ─────────────────────────────────────────
@@ -192,7 +212,7 @@ export function useBorradores() {
 
       setBorradores(prev => prev.filter(b => b.id !== borrador.id))
       // Marcar como leído en Gmail (fire-and-forget)
-      marcarComoLeido(user.email, borrador.gmail_message_id)
+      marcarComoLeido(borrador.gmail_message_id)
       return { ok: true, tipo: 'tarea', id: tarea.id }
 
     } catch (err) {
@@ -229,9 +249,17 @@ export function useBorradores() {
         .eq('id', borrador.id)
 
       setBorradores(prev => prev.filter(b => b.id !== borrador.id))
+
+      // Sincronizar con Google Calendar — misma ruta centralizada que en aprobar()
+      const { calendarEventId, error: calErr } = await sincronizarConCalendar(evento.id, datosEvento)
+
       // Marcar como leído en Gmail (fire-and-forget)
-      marcarComoLeido(user.email, borrador.gmail_message_id)
-      return { ok: true, tipo: 'evento', id: evento.id }
+      marcarComoLeido(borrador.gmail_message_id)
+
+      return {
+        ok: true, tipo: 'evento', id: evento.id,
+        calendarSync: { ok: !calErr, calendarEventId, error: calErr },
+      }
 
     } catch (err) {
       setError(err.message)
@@ -254,7 +282,7 @@ export function useBorradores() {
       if (err) throw new Error(err.message)
       setBorradores(prev => prev.filter(b => b.id !== borrador.id))
       // Marcar como leído en Gmail al rechazar también (fire-and-forget)
-      marcarComoLeido(user?.email, borrador.gmail_message_id)
+      marcarComoLeido(borrador.gmail_message_id)
       return { ok: true }
     } catch (err) {
       setError(err.message)
