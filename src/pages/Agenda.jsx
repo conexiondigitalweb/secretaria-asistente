@@ -348,7 +348,7 @@ export default function Agenda() {
             {loading ? '…' : `${eventosLocales.length} local${eventosLocales.length !== 1 ? 'es' : ''}${eventosCalendarSoloExternos.length > 0 ? ` · ${eventosCalendarSoloExternos.length} de Calendar` : ''}`}
           </p>
         </div>
-        <button onClick={abrirCrear}
+        <button onClick={() => abrirCrear()}
           className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white
                      text-sm font-medium px-3 py-2 rounded-lg transition-colors">
           <span className="text-base leading-none">+</span>
