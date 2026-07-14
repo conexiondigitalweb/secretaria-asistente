@@ -155,7 +155,7 @@ export default function Dashboard() {
               // acá solo mostramos feedback si falló (best-effort, no bloquea).
               if (res.calendarSync && !res.calendarSync.ok) {
                 setCalendarSyncMsg(
-                  `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${res.calendarSync.error ?? 'error desconocido'}`
+                  `El evento se guardó, pero no se pudo sincronizar con Google Calendar (${res.calendarSync.error ?? 'error desconocido'}). Puedes reintentar desde el botón de sincronización en Agenda.`
                 )
               }
             }
@@ -286,7 +286,7 @@ export default function Dashboard() {
                   // acá solo mostramos feedback si falló (best-effort, no bloquea).
                   if (res.calendarSync && !res.calendarSync.ok) {
                     setCalendarSyncMsg(
-                      `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${res.calendarSync.error ?? 'error desconocido'}`
+                      `El evento se guardó, pero no se pudo sincronizar con Google Calendar (${res.calendarSync.error ?? 'error desconocido'}). Puedes reintentar desde el botón de sincronización en Agenda.`
                     )
                   }
                 } else {

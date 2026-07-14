@@ -48,7 +48,7 @@ function toCalendarEvent({ titulo, descripcion, fecha_inicio, fecha_fin, lugar }
  *
  * @param {string} eventoId       — UUID del evento en eventos_agenda
  * @param {object} datosEvento    — { titulo, fecha_inicio, fecha_fin, lugar, descripcion }
- * @returns {{ calendarEventId: string|null, error: string|null }}
+ * @returns {{ calendarEventId: string|null, error: string|null, tokenExpirado?: boolean }}
  */
 export async function sincronizarConCalendar(eventoId, datosEvento) {
   try {
@@ -71,8 +71,10 @@ export async function sincronizarConCalendar(eventoId, datosEvento) {
     if (!res.ok || !data.ok) {
       const msg = data.scopeInsuficiente
         ? 'Permisos de Calendar insuficientes — reconecta la cuenta en Configuración'
-        : (data.error ?? 'Error al crear evento en Google Calendar')
-      return { calendarEventId: null, error: msg }
+        : data.tokenExpirado
+          ? 'Token de Google expirado — reconecta desde Configuración'
+          : (data.error ?? 'Error al crear evento en Google Calendar')
+      return { calendarEventId: null, error: msg, tokenExpirado: !!data.tokenExpirado }
     }
 
     const calendarEventId = data.event?.id ?? null

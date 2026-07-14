@@ -138,7 +138,7 @@ function EventoCard({ evento, onEditar, onEliminar }) {
 export default function Agenda() {
   const { user }  = useAuth()
   const { profile } = useUserProfile(user?.id)
-  const { eventos: eventosLocales, loading, error, crearEvento, actualizarEvento, eliminarEvento } = useAgenda()
+  const { eventos: eventosLocales, loading, error, crearEvento, actualizarEvento, eliminarEvento, refetch: refetchLocales } = useAgenda()
   const { eventos: eventosCalendar, loading: loadingCalendar, fetchEventos: fetchCalendarEventos } =
     useGoogleCalendar()
   const {
@@ -152,6 +152,8 @@ export default function Agenda() {
   const [guardando, setGuardando]       = useState(false)
   const [errorMsg, setErrorMsg]         = useState(null)
   const [calendarSyncMsg, setCalendarSyncMsg] = useState(null) // aviso no-bloqueante de Calendar
+  const [sincronizando, setSincronizando]     = useState(null) // { actual, total } mientras se reintenta en lote
+  const [resultadoSync, setResultadoSync]     = useState(null) // { exitosos, fallidos, tokenExpirado, mensaje }
   const [filtro, setFiltro]             = useState('proximos') // 'proximos' | 'pasados' | 'todos'
   const [confirmarEliminar, setConfirmarEliminar] = useState(null)
   const [vista, setVista]               = useState('lista') // 'lista' | 'calendario'
@@ -161,12 +163,17 @@ export default function Agenda() {
   // { evento, funcionario, correoEnviado, waAbierto, enviando, error }
   const [notif, setNotif] = useState(null)
 
-  // Cargar eventos de Calendar para el mes actual ± 2 meses
-  useEffect(() => {
-    if (!user?.email) return
+  // Rango por defecto usado para refrescar eventos de Calendar (mes actual ± ventana)
+  function refrescarCalendarRango() {
     const inicio = new Date(); inicio.setMonth(inicio.getMonth() - 1); inicio.setDate(1)
     const fin    = new Date(); fin.setMonth(fin.getMonth() + 3); fin.setDate(1)
     fetchCalendarEventos(inicio, fin)
+  }
+
+  // Cargar eventos de Calendar para el mes actual ± 2 meses
+  useEffect(() => {
+    if (!user?.email) return
+    refrescarCalendarRango()
   }, [user?.email, fetchCalendarEventos])
 
   // Vista por defecto: calendario para rol 'agenda', lista para 'admin' —
@@ -181,6 +188,10 @@ export default function Agenda() {
   const calendarIdsLocales = new Set(
     eventosLocales.map(e => e.calendar_event_id).filter(Boolean)
   )
+
+  // Eventos locales que se guardaron en Supabase pero nunca llegaron a Google
+  // Calendar (calendar_event_id NULL) — candidatos para el botón de reintento.
+  const eventosPendientesSync = eventosLocales.filter(e => !e.calendar_event_id)
 
   // Eventos de Calendar que NO tienen versión local (genuinamente externos)
   const eventosCalendarSoloExternos = eventosCalendar.filter(
@@ -265,9 +276,7 @@ export default function Agenda() {
           setCalendarSyncMsg(calErr)
         } else {
           // Refrescar eventos de Calendar para incluir el recién creado
-          const inicio = new Date(); inicio.setMonth(inicio.getMonth() - 1); inicio.setDate(1)
-          const fin    = new Date(); fin.setMonth(fin.getMonth() + 3); fin.setDate(1)
-          fetchCalendarEventos(inicio, fin)
+          refrescarCalendarRango()
         }
       }
 
@@ -324,6 +333,48 @@ export default function Agenda() {
       (evento.descripcion ? `\n${evento.descripcion}` : '')
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
     setNotif(s => ({ ...s, waAbierto: true }))
+  }
+
+  // Reintentar sincronización con Google Calendar de todos los eventos
+  // locales cuyo calendar_event_id sigue en NULL (creados pero nunca
+  // sincronizados, por ejemplo por token expirado en el momento de crearlos).
+  async function handleReintentarSync() {
+    const pendientes = eventosLocales.filter(e => !e.calendar_event_id)
+    if (pendientes.length === 0 || sincronizando) return
+
+    setResultadoSync(null)
+    setCalendarSyncMsg(null)
+
+    let exitosos      = 0
+    let fallidos       = 0
+    let tokenExpirado = false
+
+    for (let i = 0; i < pendientes.length; i++) {
+      setSincronizando({ actual: i + 1, total: pendientes.length })
+      const evento = pendientes[i]
+      const { error: calErr, tokenExpirado: expirado } = await sincronizarConCalendar(evento.id, evento)
+
+      if (calErr) {
+        fallidos++
+        if (expirado) {
+          tokenExpirado = true
+          break // el token no va a mejorar a mitad del lote — dejar de intentar
+        }
+      } else {
+        exitosos++
+      }
+    }
+
+    setSincronizando(null)
+    await refetchLocales()      // trae los calendar_event_id recién asignados
+    if (exitosos > 0) refrescarCalendarRango()
+
+    setResultadoSync({
+      exitosos, fallidos, tokenExpirado,
+      mensaje: tokenExpirado
+        ? 'Token de Google expirado — reconecta desde Configuración'
+        : `${exitosos} evento${exitosos !== 1 ? 's' : ''} sincronizado${exitosos !== 1 ? 's' : ''}, ${fallidos} fallido${fallidos !== 1 ? 's' : ''}`,
+    })
   }
 
   async function handleEliminar() {
@@ -404,9 +455,43 @@ export default function Agenda() {
         <div className="mb-4 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           <span className="shrink-0">⚠️</span>
           <span>
-            Evento guardado localmente, pero no se pudo sincronizar con Google Calendar: {calendarSyncMsg}
+            Evento guardado. Sincronización con Google Calendar pendiente — se puede reintentar
+            desde el botón de sincronización debajo. ({calendarSyncMsg})
           </span>
           <button onClick={() => setCalendarSyncMsg(null)} className="ml-auto text-amber-500 hover:text-amber-700 shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* Botón de reintento de sincronización — visible mientras haya eventos locales sin calendar_event_id */}
+      {eventosPendientesSync.length > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <span>
+            ⚠️ {eventosPendientesSync.length} evento{eventosPendientesSync.length !== 1 ? 's' : ''} local
+            {eventosPendientesSync.length !== 1 ? 'es' : ''} sin sincronizar con Google Calendar.
+          </span>
+          <button
+            onClick={handleReintentarSync}
+            disabled={!!sincronizando}
+            className="shrink-0 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed
+                       text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {sincronizando
+              ? `Sincronizando ${sincronizando.actual} de ${sincronizando.total}…`
+              : '🔄 Reintentar sincronización'}
+          </button>
+        </div>
+      )}
+
+      {/* Resultado de la última sincronización en lote */}
+      {resultadoSync && (
+        <div className={`mb-4 flex items-start justify-between gap-3 text-xs rounded-lg px-3 py-2 border
+          ${resultadoSync.tokenExpirado
+            ? 'text-red-700 bg-red-50 border-red-200'
+            : resultadoSync.fallidos > 0
+              ? 'text-amber-700 bg-amber-50 border-amber-200'
+              : 'text-green-700 bg-green-50 border-green-200'}`}>
+          <span>{resultadoSync.mensaje}</span>
+          <button onClick={() => setResultadoSync(null)} className="shrink-0 opacity-60 hover:opacity-100">✕</button>
         </div>
       )}
 

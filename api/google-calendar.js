@@ -42,7 +42,9 @@ async function calendarFetch(path, accessToken, method = 'GET', body = null) {
   const data = await res.json()
 
   if (!res.ok) {
-    throw new Error(data.error?.message ?? `Calendar API error ${res.status}`)
+    const err = new Error(data.error?.message ?? `Calendar API error ${res.status}`)
+    err.status = res.status  // usado para distinguir 401 (token expirado) de 403 (scopes)
+    throw err
   }
 
   return data
@@ -78,7 +80,11 @@ export default async function handler(req, res) {
 
     const accessToken = await obtenerTokenValido(emailAdmin, supabase)
     if (!accessToken) {
-      return res.status(400).json({ ok: false, error: 'Google Calendar no conectado (falta token del admin)' })
+      return res.status(400).json({
+        ok: false,
+        error: 'Google Calendar no conectado (falta token del admin)',
+        tokenExpirado: true,
+      })
     }
 
     // ── GET — listar eventos ─────────────────────────────────────────────────
@@ -162,12 +168,14 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[google-calendar] Error:', err.message)
-    // Si el error es de scopes insuficientes, darlo a conocer claramente
-    const esScopes = err.message.includes('insufficient') || err.message.includes('403')
-    return res.status(esScopes ? 403 : 500).json({
-      ok:             false,
-      error:          err.message,
+    // Si el error es de scopes insuficientes o de token expirado/inválido, darlo a conocer claramente
+    const esScopes        = err.status === 403 || err.message.includes('insufficient')
+    const esTokenExpirado = err.status === 401
+    return res.status(err.status ?? 500).json({
+      ok:                false,
+      error:             err.message,
       scopeInsuficiente: esScopes,
+      tokenExpirado:     esTokenExpirado,
     })
   }
 }
