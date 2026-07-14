@@ -136,6 +136,20 @@ export function diasHabilesRestantes(fechaLimite) {
   return signo * count
 }
 
+// ─── Estados finales (no aplica cálculo de vencimiento) ──────────────────────
+
+/**
+ * Indica si una tarea está en un estado "final" — ya no debe mostrar
+ * indicadores de vencimiento (días restantes, números en rojo, etc.).
+ * 'archivado' no existe todavía en el schema, pero se incluye por si se
+ * agrega a futuro (mismo criterio que 'resuelto': ya no requiere seguimiento).
+ * @param {string|null|undefined} estado
+ * @returns {boolean}
+ */
+export function esEstadoFinal(estado) {
+  return estado === 'resuelto' || estado === 'archivado'
+}
+
 // ─── Prioridad por tipo de solicitud ─────────────────────────────────────────
 
 /**

@@ -1,4 +1,4 @@
-import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto } from '../../lib/utils'
+import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto, esEstadoFinal } from '../../lib/utils'
 
 const TIPO_LABEL = {
   tutela:   'Tutela',
@@ -21,21 +21,27 @@ const PRIORIDAD_COLOR = {
  * @param {{ tarea: object }} props
  */
 export default function TareaUrgente({ tarea }) {
-  const dias = diasHabilesRestantes(tarea.fecha_limite)
+  // Tarea resuelta (o archivada) — nunca debe mostrar indicador de vencimiento,
+  // aunque en la práctica Dashboard ya filtra estas tareas antes de llegar aquí.
+  const esFinal = esEstadoFinal(tarea.estado)
+  const dias = esFinal ? null : diasHabilesRestantes(tarea.fecha_limite)
 
-  const hoyExacto = esHoy(tarea.fecha_limite)
+  const hoyExacto = !esFinal && esHoy(tarea.fecha_limite)
   let diasColor = 'text-slate-500'
-  let diasLabel = dias === null
-    ? '—'
-    : dias < 0
-      ? `Venció hace ${Math.abs(dias)}d hábiles`
-      : hoyExacto
-        ? 'Vence hoy'
-        : dias === 0
-          ? `0h · Vence ${formatDiaCorto(tarea.fecha_limite)}`
-          : `${dias}d hábiles`
+  let diasLabel = esFinal
+    ? '✓ Resuelto'
+    : dias === null
+      ? '—'
+      : dias < 0
+        ? `Venció hace ${Math.abs(dias)}d hábiles`
+        : hoyExacto
+          ? 'Vence hoy'
+          : dias === 0
+            ? `0h · Vence ${formatDiaCorto(tarea.fecha_limite)}`
+            : `${dias}d hábiles`
 
-  if (dias !== null && (dias < 0 || hoyExacto)) diasColor = 'text-red-600 font-semibold'
+  if (esFinal) diasColor = 'text-green-600 font-medium'
+  else if (dias !== null && (dias < 0 || hoyExacto)) diasColor = 'text-red-600 font-semibold'
   else if (dias !== null && dias === 0) diasColor = 'text-orange-500 font-semibold' // 0h pero no hoy
   else if (dias !== null && dias <= 3) diasColor = 'text-orange-500 font-medium'
 

@@ -1,8 +1,12 @@
 import Badge from '../ui/Badge'
-import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto } from '../../lib/utils'
+import { diasHabilesRestantes, formatFecha, esHoy, formatDiaCorto, esEstadoFinal } from '../../lib/utils'
 import { cn } from '../../lib/cn'
 
-function DiasHabiles({ fecha_limite }) {
+function DiasHabiles({ fecha_limite, estado }) {
+  // Tarea resuelta (o archivada) — ya no aplica indicador de vencimiento.
+  if (esEstadoFinal(estado)) {
+    return <span className="text-xs text-green-600 font-medium">✓ Resuelto</span>
+  }
   const dias = diasHabilesRestantes(fecha_limite)
   if (dias === null) return <span className="text-text-muted text-xs">—</span>
   const hoyExacto = esHoy(fecha_limite)
@@ -87,7 +91,7 @@ export default function TablaTareas({ tareas, onSelect }) {
               <td className="px-4 py-3.5 whitespace-nowrap">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-xs text-text-secondary">{formatFecha(t.fecha_limite)}</span>
-                  <DiasHabiles fecha_limite={t.fecha_limite} />
+                  <DiasHabiles fecha_limite={t.fecha_limite} estado={t.estado} />
                 </div>
               </td>
               <td className="px-4 py-3.5"><Badge value={t.estado} /></td>

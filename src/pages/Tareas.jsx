@@ -6,11 +6,14 @@ import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
 import { useFuncionarios } from '../hooks/useFuncionarios'
-import { formatFecha, diasRestantes, diasHabilesRestantes, esHoy, formatDiaCorto } from '../lib/utils'
+import { formatFecha, diasRestantes, diasHabilesRestantes, esHoy, formatDiaCorto, esEstadoFinal } from '../lib/utils'
 import { notificarAsignacion } from '../lib/notificaciones'
 
-const ESTADOS = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
-const TIPOS   = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
+const ESTADOS         = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
+// En la vista "Activas" no tiene sentido filtrar por resuelto/vencido — ya están
+// excluidas de la lista por la pestaña misma. Dropdown reducido para esa vista.
+const ESTADOS_ACTIVAS = ['todos', 'pendiente', 'en_proceso']
+const TIPOS           = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
 
 const ESTADO_LABEL = {
   todos: 'Todos los estados', pendiente: 'Pendiente', en_proceso: 'En proceso',
@@ -25,6 +28,7 @@ export default function Tareas() {
   const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
   const { funcionarios } = useFuncionarios({ soloActivos: true })
   const [busqueda, setBusqueda]             = useState('')
+  const [vistaTareas, setVistaTareas]       = useState('activas') // 'activas' | 'todas'
   const [filtroEstado, setFiltroEstado]     = useState('todos')
   const [filtroTipo, setFiltroTipo]         = useState('todos')
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
@@ -40,8 +44,13 @@ export default function Tareas() {
 
   const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
 
+  // Tareas "activas" = no están en un estado final (resuelto/archivado).
+  // La pestaña "Activas" oculta el historial resuelto por defecto; nunca se borran de la BD.
+  const tareasActivas = useMemo(() => tareas.filter(t => !esEstadoFinal(t.estado)), [tareas])
+
   const tareasFiltradas = useMemo(() => {
-    return tareas.filter(t => {
+    const base = vistaTareas === 'activas' ? tareasActivas : tareas
+    return base.filter(t => {
       const matchBusqueda = !busqueda ||
         t.asunto?.toLowerCase().includes(busqueda.toLowerCase()) ||
         t.remitente?.toLowerCase().includes(busqueda.toLowerCase())
@@ -49,7 +58,12 @@ export default function Tareas() {
       const matchTipo   = filtroTipo   === 'todos' || t.tipo   === filtroTipo
       return matchBusqueda && matchEstado && matchTipo
     })
-  }, [tareas, busqueda, filtroEstado, filtroTipo])
+  }, [tareas, tareasActivas, vistaTareas, busqueda, filtroEstado, filtroTipo])
+
+  function cambiarVista(v) {
+    setVistaTareas(v)
+    setFiltroEstado('todos') // evita quedar con un estado inválido/confuso al cambiar de pestaña
+  }
 
   async function handleNuevaTarea(data) {
     setGuardando(true)
@@ -184,6 +198,26 @@ export default function Tareas() {
         </div>
       )}
 
+      {/* ── Toggle Activas / Todas (historial) ───────────────────────────── */}
+      <div className="px-4 sm:px-6 pt-3 flex gap-1 shrink-0 bg-white">
+        {[
+          { value: 'activas', label: `Activas (${tareasActivas.length})` },
+          { value: 'todas',   label: `Todas (${tareas.length})` },
+        ].map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => cambiarVista(value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+              vistaTareas === value
+                ? 'bg-primary text-white border-primary'
+                : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── Filtros ───────────────────────────────────────────────────── */}
       {/* En desktop: siempre visible en fila. En móvil: colapsable en columna */}
       <div className={`border-b border-slate-200 bg-white shrink-0
@@ -205,7 +239,9 @@ export default function Tareas() {
               className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
                          text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {ESTADOS.map(e => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
+              {(vistaTareas === 'activas' ? ESTADOS_ACTIVAS : ESTADOS).map(e => (
+                <option key={e} value={e}>{ESTADO_LABEL[e]}</option>
+              ))}
             </select>
             <select
               value={filtroTipo}
@@ -356,7 +392,9 @@ export default function Tareas() {
                 <div>
                   <p className="text-xs text-slate-400 mb-0.5">Fecha límite</p>
                   <p className="text-sm text-slate-700">{formatFecha(sel.fecha_limite)}</p>
-                  {sel.fecha_limite && (() => {
+                  {esEstadoFinal(sel.estado) ? (
+                    <p className="text-xs mt-0.5 text-green-600 font-medium">✓ Resuelto</p>
+                  ) : sel.fecha_limite && (() => {
                     const d = diasHabilesRestantes(sel.fecha_limite)
                     if (d === null) return null
                     const hoyExacto = esHoy(sel.fecha_limite)

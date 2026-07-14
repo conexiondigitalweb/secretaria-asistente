@@ -12,7 +12,7 @@ import { useTareas } from '../hooks/useTareas'
 import { useAgenda } from '../hooks/useAgenda'
 import { useGmailSync } from '../hooks/useGmailSync'
 import { useBorradores } from '../hooks/useBorradores'
-import { diasHabilesRestantes, esHoy } from '../lib/utils'
+import { diasHabilesRestantes, esHoy, esEstadoFinal } from '../lib/utils'
 
 function saludo() {
   const h = new Date().getHours()
@@ -44,7 +44,8 @@ export default function Dashboard() {
   const [errorEvento, setErrorEvento]       = useState(null)
   const [calendarSyncMsg, setCalendarSyncMsg] = useState(null)
 
-  const activas    = tareas.filter(t => t.estado !== 'resuelto')
+  // No cuentan como pendientes/vencidas las tareas en estado final (resuelto o archivado).
+  const activas    = tareas.filter(t => !esEstadoFinal(t.estado))
   const pendientes = activas.length
   const criticas   = activas.filter(t => t.prioridad === 'critica').length
   const vencenHoy  = activas.filter(t => esHoy(t.fecha_limite)).length
