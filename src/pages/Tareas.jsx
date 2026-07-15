@@ -14,6 +14,10 @@ const ESTADOS         = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencid
 // excluidas de la lista por la pestaña misma. Dropdown reducido para esa vista.
 const ESTADOS_ACTIVAS = ['todos', 'pendiente', 'en_proceso']
 const TIPOS           = ['todos', 'tutela', 'peticion', 'queja', 'solicitud', 'tarea', 'reunion', 'otro']
+const PRIORIDADES     = ['todos', 'critica', 'alta', 'media', 'baja']
+// 'vencimiento' es un filtro derivado (calculado), no una columna — refleja
+// exactamente los mismos criterios que los KPI del Dashboard.
+const VENCIMIENTOS    = ['todos', 'hoy', 'vencidas']
 
 const ESTADO_LABEL = {
   todos: 'Todos los estados', pendiente: 'Pendiente', en_proceso: 'En proceso',
@@ -23,15 +27,47 @@ const TIPO_LABEL = {
   todos: 'Todos los tipos', tutela: 'Tutela', peticion: 'Petición', queja: 'Queja',
   solicitud: 'Solicitud', tarea: 'Tarea', reunion: 'Reunión', otro: 'Otro',
 }
+const PRIORIDAD_LABEL = {
+  todos: 'Toda prioridad', critica: 'Crítica', alta: 'Alta', media: 'Media', baja: 'Baja',
+}
+const VENCIMIENTO_LABEL = {
+  todos: 'Cualquier vencimiento', hoy: 'Vencen hoy', vencidas: 'Vencidas',
+}
 
-export default function Tareas() {
+/**
+ * Espejo exacto de los criterios usados para los KPI "Vencen hoy" / "Vencidas"
+ * en Dashboard.jsx: solo aplica sobre tareas activas (no en estado final).
+ */
+function matchesVencimiento(t, filtro) {
+  if (filtro === 'todos') return true
+  if (esEstadoFinal(t.estado)) return false
+  if (filtro === 'hoy') return esHoy(t.fecha_limite)
+  if (filtro === 'vencidas') {
+    const d = diasHabilesRestantes(t.fecha_limite)
+    return d !== null && d < 0
+  }
+  return true
+}
+
+/**
+ * @param {{ filtroInicial?: { vista?: string, estado?: string, prioridad?: string, vencimiento?: string } }} props
+ *
+ * filtroInicial llega desde App.jsx cuando se navega aquí con un filtro
+ * pre-aplicado (ej. clic en un KPI del Dashboard). Como Tareas se desmonta
+ * y remonta por completo en cada cambio de página (ver PAGE_MAP en App.jsx),
+ * basta con usarlo como valor inicial perezoso de useState — no hace falta
+ * un useEffect de sincronización.
+ */
+export default function Tareas({ filtroInicial } = {}) {
   const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
   const { funcionarios } = useFuncionarios({ soloActivos: true })
   const [busqueda, setBusqueda]             = useState('')
-  const [vistaTareas, setVistaTareas]       = useState('activas') // 'activas' | 'todas'
-  const [filtroEstado, setFiltroEstado]     = useState('todos')
+  const [vistaTareas, setVistaTareas]       = useState(() => filtroInicial?.vista ?? 'activas') // 'activas' | 'todas'
+  const [filtroEstado, setFiltroEstado]     = useState(() => filtroInicial?.estado ?? 'todos')
   const [filtroTipo, setFiltroTipo]         = useState('todos')
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
+  const [filtroPrioridad, setFiltroPrioridad] = useState(() => filtroInicial?.prioridad ?? 'todos')
+  const [filtroVencimiento, setFiltroVencimiento] = useState(() => filtroInicial?.vencimiento ?? 'todos')
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(!!filtroInicial)
   const [modalNueva, setModalNueva]         = useState(false)
   const [guardando, setGuardando]           = useState(false)
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null)
@@ -42,7 +78,8 @@ export default function Tareas() {
   const [modalEditar, setModalEditar]       = useState(false)
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
-  const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos'
+  const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos' ||
+    filtroPrioridad !== 'todos' || filtroVencimiento !== 'todos'
 
   // Tareas "activas" = no están en un estado final (resuelto/archivado).
   // La pestaña "Activas" oculta el historial resuelto por defecto; nunca se borran de la BD.
@@ -54,11 +91,13 @@ export default function Tareas() {
       const matchBusqueda = !busqueda ||
         t.asunto?.toLowerCase().includes(busqueda.toLowerCase()) ||
         t.remitente?.toLowerCase().includes(busqueda.toLowerCase())
-      const matchEstado = filtroEstado === 'todos' || t.estado === filtroEstado
-      const matchTipo   = filtroTipo   === 'todos' || t.tipo   === filtroTipo
-      return matchBusqueda && matchEstado && matchTipo
+      const matchEstado      = filtroEstado === 'todos' || t.estado === filtroEstado
+      const matchTipo        = filtroTipo   === 'todos' || t.tipo   === filtroTipo
+      const matchPrioridad   = filtroPrioridad === 'todos' || t.prioridad === filtroPrioridad
+      const matchVencimiento = matchesVencimiento(t, filtroVencimiento)
+      return matchBusqueda && matchEstado && matchTipo && matchPrioridad && matchVencimiento
     })
-  }, [tareas, tareasActivas, vistaTareas, busqueda, filtroEstado, filtroTipo])
+  }, [tareas, tareasActivas, vistaTareas, busqueda, filtroEstado, filtroTipo, filtroPrioridad, filtroVencimiento])
 
   function cambiarVista(v) {
     setVistaTareas(v)
@@ -146,7 +185,11 @@ export default function Tareas() {
   }
 
   function limpiarFiltros() {
-    setBusqueda(''); setFiltroEstado('todos'); setFiltroTipo('todos')
+    setBusqueda('')
+    setFiltroEstado('todos')
+    setFiltroTipo('todos')
+    setFiltroPrioridad('todos')
+    setFiltroVencimiento('todos')
   }
 
   const sel = tareaSeleccionada
@@ -250,6 +293,22 @@ export default function Tareas() {
                          text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {TIPOS.map(t => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
+            </select>
+            <select
+              value={filtroPrioridad}
+              onChange={e => setFiltroPrioridad(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {PRIORIDADES.map(p => <option key={p} value={p}>{PRIORIDAD_LABEL[p]}</option>)}
+            </select>
+            <select
+              value={filtroVencimiento}
+              onChange={e => setFiltroVencimiento(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5
+                         text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {VENCIMIENTOS.map(v => <option key={v} value={v}>{VENCIMIENTO_LABEL[v]}</option>)}
             </select>
           </div>
           <div className="flex items-center justify-between md:contents">

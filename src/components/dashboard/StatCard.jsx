@@ -44,14 +44,24 @@ const VARIANTS = {
  *   value: number|string,
  *   sub?: string,
  *   icon: React.ComponentType<{className?: string}>,
- *   color?: 'default'|'blue'|'red'|'orange'|'green'
+ *   color?: 'default'|'blue'|'red'|'orange'|'green',
+ *   onClick?: () => void
  * }} props
  */
-export default function StatCard({ label, value, sub, icon: Icon, color = 'default' }) {
+export default function StatCard({ label, value, sub, icon: Icon, color = 'default', onClick }) {
   const v = VARIANTS[color] ?? VARIANTS.default
+  const Tag = onClick ? 'button' : 'div'
 
   return (
-    <div className={cn('rounded-xl border p-4 sm:p-5 flex items-start gap-4 shadow-sm', v.card)}>
+    <Tag
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={cn(
+        'rounded-xl border p-4 sm:p-5 flex items-start gap-4 shadow-sm text-left w-full',
+        onClick && 'cursor-pointer hover:shadow-md active:scale-[0.99] transition-shadow transition-transform',
+        v.card
+      )}
+    >
       {/* Ícono */}
       {Icon && (
         <div className={cn('rounded-lg p-2.5 shrink-0', v.icon)}>
@@ -67,6 +77,6 @@ export default function StatCard({ label, value, sub, icon: Icon, color = 'defau
         <p className={cn('text-3xl font-bold leading-none', v.value)}>{value}</p>
         {sub && <p className={cn('text-xs mt-1.5', v.sub)}>{sub}</p>}
       </div>
-    </div>
+    </Tag>
   )
 }

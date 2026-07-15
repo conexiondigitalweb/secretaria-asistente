@@ -27,7 +27,7 @@ function fechaLarga() {
   }).format(new Date())
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onNavegarTareas }) {
   const { tareas, loading: loadingTareas, error: errorTareas, refetch: refetchTareas } = useTareas()
   const { eventos, loading: loadingEventos, refetch: refetchEventos, actualizarEvento } = useAgenda()
   const { sincronizando, ultimaSync, resultado, gmailConectado, sincronizarAhora } =
@@ -177,6 +177,7 @@ export default function Dashboard() {
           sub="sin resolver"
           icon={ClipboardList}
           color="blue"
+          onClick={onNavegarTareas ? () => onNavegarTareas({ vista: 'activas' }) : undefined}
         />
         <StatCard
           label="Críticas"
@@ -184,6 +185,7 @@ export default function Dashboard() {
           sub="tutelas y urgentes"
           icon={AlertTriangle}
           color={criticas > 0 ? 'red' : 'default'}
+          onClick={onNavegarTareas ? () => onNavegarTareas({ vista: 'activas', prioridad: 'critica' }) : undefined}
         />
         <StatCard
           label="Vencen hoy"
@@ -191,6 +193,7 @@ export default function Dashboard() {
           sub="atención inmediata"
           icon={Clock}
           color={vencenHoy > 0 ? 'orange' : 'default'}
+          onClick={onNavegarTareas ? () => onNavegarTareas({ vista: 'activas', vencimiento: 'hoy' }) : undefined}
         />
         <StatCard
           label="Vencidas"
@@ -198,6 +201,7 @@ export default function Dashboard() {
           sub="requieren acción"
           icon={XCircle}
           color={vencidas > 0 ? 'red' : 'default'}
+          onClick={onNavegarTareas ? () => onNavegarTareas({ vista: 'activas', vencimiento: 'vencidas' }) : undefined}
         />
       </div>
 

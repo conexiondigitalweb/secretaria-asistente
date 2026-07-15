@@ -49,6 +49,11 @@ export default function App() {
   const { profile, loading: loadingPerfil } = useUserProfile(user?.id)
   const [page, setPage] = useState('dashboard')
   const [mensajeAcceso, setMensajeAcceso] = useState(null)
+  // Filtro inicial pasado a la página destino al navegar desde otra
+  // (ej. clic en un KPI del Dashboard → Tareas con filtro pre-aplicado).
+  // Se resetea a null en cada navegación sin params para no dejar un
+  // filtro "pegado" al volver a entrar por el sidebar.
+  const [navParams, setNavParams] = useState(null)
 
   const rol = profile?.role
   const paginasPermitidas = PAGINAS_PERMITIDAS[rol] ?? []
@@ -63,12 +68,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rol])
 
-  function irA(id) {
+  function irA(id, params = null) {
     if (!paginasPermitidas.includes(id)) {
       setMensajeAcceso('Sin acceso a esta sección')
       return
     }
     setMensajeAcceso(null)
+    setNavParams(params)
     setPage(id)
   }
 
@@ -183,7 +189,10 @@ export default function App() {
             <button onClick={() => setMensajeAcceso(null)} className="text-amber-500 hover:text-amber-700 ml-3">✕</button>
           </div>
         )}
-        <PageComponent />
+        <PageComponent
+          {...(page === 'dashboard' ? { onNavegarTareas: (filtro) => irA('tareas', filtro) } : {})}
+          {...(page === 'tareas' ? { filtroInicial: navParams } : {})}
+        />
       </main>
 
       {/* ── Bottom nav — móvil ───────────────────────────────────────────── */}
