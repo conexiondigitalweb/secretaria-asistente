@@ -6,8 +6,16 @@ import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import { useTareas } from '../hooks/useTareas'
 import { useFuncionarios } from '../hooks/useFuncionarios'
+import { useAuth } from '../hooks/useAuth'
+import { useUserProfile } from '../hooks/useUserProfile'
 import { formatFecha, diasRestantes, diasHabilesRestantes, esHoy, formatDiaCorto, esEstadoFinal } from '../lib/utils'
 import { notificarAsignacion } from '../lib/notificaciones'
+import { generarBorradorIA } from '../lib/borradorIA'
+
+// Tipos de tarea para los que tiene sentido generar un borrador de
+// respuesta con IA — tutela/petición/queja son solicitudes que requieren
+// una respuesta formal; reunión/tarea/solicitud genérica/otro no.
+const TIPOS_CON_BORRADOR_IA = ['tutela', 'peticion', 'queja']
 
 const ESTADOS         = ['todos', 'pendiente', 'en_proceso', 'resuelto', 'vencido']
 // En la vista "Activas" no tiene sentido filtrar por resuelto/vencido — ya están
@@ -61,6 +69,8 @@ function matchesVencimiento(t, filtro) {
 export default function Tareas({ filtroInicial } = {}) {
   const { tareas, loading, error, crearTarea, actualizarTarea } = useTareas()
   const { funcionarios } = useFuncionarios({ soloActivos: true })
+  const { user } = useAuth()
+  const { profile } = useUserProfile(user?.id)
   const [busqueda, setBusqueda]             = useState('')
   const [vistaTareas, setVistaTareas]       = useState(() => filtroInicial?.vista ?? 'activas') // 'activas' | 'todas'
   const [filtroEstado, setFiltroEstado]     = useState(() => filtroInicial?.estado ?? 'todos')
@@ -77,6 +87,12 @@ export default function Tareas({ filtroInicial } = {}) {
   const [guardandoFunc, setGuardandoFunc]   = useState(false)
   const [modalEditar, setModalEditar]       = useState(false)
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  // Borrador de respuesta con IA (panel detalle) — solo admin, solo tutela/peticion/queja
+  const [borradorTexto, setBorradorTexto]         = useState('')
+  const [generandoBorrador, setGenerandoBorrador] = useState(false)
+  const [guardandoBorrador, setGuardandoBorrador] = useState(false)
+  const [errorBorrador, setErrorBorrador]         = useState(null)
+  const [copiadoBorrador, setCopiadoBorrador]     = useState(false)
 
   const hayFiltros = busqueda || filtroEstado !== 'todos' || filtroTipo !== 'todos' ||
     filtroPrioridad !== 'todos' || filtroVencimiento !== 'todos'
@@ -166,6 +182,45 @@ export default function Tareas({ filtroInicial } = {}) {
       setTareaSeleccionada(actualizada)
     } catch (e) {
       setErrorAccion('Error al actualizar: ' + e.message)
+    }
+  }
+
+  async function handleGenerarBorrador() {
+    if (!sel) return
+    setGenerandoBorrador(true)
+    setErrorBorrador(null)
+    setCopiadoBorrador(false)
+    const res = await generarBorradorIA(sel.id)
+    setGenerandoBorrador(false)
+    if (res.ok) {
+      setBorradorTexto(res.borrador)
+      setTareaSeleccionada(prev => (prev ? { ...prev, borrador_ia: res.borrador } : prev))
+    } else {
+      setErrorBorrador(res.error ?? 'Error al generar el borrador')
+    }
+  }
+
+  async function handleGuardarBorrador() {
+    if (!sel) return
+    setGuardandoBorrador(true)
+    setErrorBorrador(null)
+    try {
+      const actualizada = await actualizarTarea(sel.id, { borrador_ia: borradorTexto })
+      setTareaSeleccionada(actualizada)
+    } catch (e) {
+      setErrorBorrador('Error al guardar: ' + e.message)
+    } finally {
+      setGuardandoBorrador(false)
+    }
+  }
+
+  async function handleCopiarBorrador() {
+    try {
+      await navigator.clipboard.writeText(borradorTexto)
+      setCopiadoBorrador(true)
+      setTimeout(() => setCopiadoBorrador(false), 2000)
+    } catch {
+      setErrorBorrador('No se pudo copiar al portapapeles')
     }
   }
 
@@ -341,6 +396,9 @@ export default function Tareas({ filtroInicial } = {}) {
             setFiltrosAbiertos(false)
             setNotifDetalle({})
             setFuncEdit(t.funcionario_id ?? '')
+            setBorradorTexto(t.borrador_ia ?? '')
+            setErrorBorrador(null)
+            setCopiadoBorrador(false)
           }} />
         )}
       </div>
@@ -565,6 +623,79 @@ export default function Tareas({ filtroInicial } = {}) {
                             Sin correo ni WhatsApp — regístralos en Configuración.
                           </p>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Borrador de respuesta con IA — solo admin, solo tutela/petición/queja */}
+              {profile?.role === 'admin' && TIPOS_CON_BORRADOR_IA.includes(sel.tipo) && (() => {
+                const cambioBorrador = borradorTexto !== (sel.borrador_ia ?? '')
+                return (
+                  <div className="border-t border-slate-100 pt-4">
+                    <p className="text-xs text-slate-400 mb-2 font-medium">Borrador de respuesta (IA)</p>
+
+                    {errorBorrador && (
+                      <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-2">
+                        {errorBorrador}
+                      </p>
+                    )}
+
+                    {generandoBorrador ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-xs text-slate-500">
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                        Generando borrador con IA…
+                      </div>
+                    ) : !borradorTexto ? (
+                      <button
+                        onClick={handleGenerarBorrador}
+                        className="w-full py-2.5 rounded-lg bg-primary text-white text-sm font-medium
+                                   hover:bg-primary-hover transition-colors"
+                      >
+                        ✨ Generar borrador con IA
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <textarea
+                          value={borradorTexto}
+                          onChange={e => setBorradorTexto(e.target.value)}
+                          rows={10}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700
+                                     leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                        />
+
+                        {cambioBorrador && (
+                          <button
+                            onClick={handleGuardarBorrador}
+                            disabled={guardandoBorrador}
+                            className="w-full py-1.5 rounded-lg bg-primary text-white text-xs font-medium
+                                       hover:bg-primary-hover disabled:opacity-50 transition-colors"
+                          >
+                            {guardandoBorrador ? 'Guardando…' : 'Guardar cambios'}
+                          </button>
+                        )}
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleCopiarBorrador}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors
+                              ${copiadoBorrador
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                          >
+                            {copiadoBorrador ? '✓ Copiado' : '📋 Copiar al portapapeles'}
+                          </button>
+                          <button
+                            onClick={handleGenerarBorrador}
+                            disabled={generandoBorrador}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-medium border border-slate-200
+                                       text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                          >
+                            🔄 Regenerar
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
